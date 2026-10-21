@@ -1,0 +1,550 @@
+openapi: 3.0.3
+info:
+  title: JoJo Cinema API
+  version: 1.0.0
+  description: >
+    Official REST API for JoJo Cinema — used by the frontend application and the
+    WhatsApp-based AI Multi-Agent booking system.
+servers:
+  - url: http://localhost:4000/api
+    description: Local development server
+  - url: https://api.jojocinema.com/api
+    description: Production server
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Returns service status, timestamp, and environment
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /movies:
+    get:
+      summary: List and search movies
+      description: Retrieve currently showing and upcoming movies with filtering and pagination
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Filter by title or synopsis keywords
+        - name: city
+          in: query
+          schema:
+            type: string
+          description: Filter movies currently showing in a specific city
+        - name: language
+          in: query
+          schema:
+            type: string
+          description: Filter by language (e.g. Hindi, English, Tamil)
+        - name: genre
+          in: query
+          schema:
+            type: string
+          description: Filter by genre (e.g. Action, Sci-Fi)
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [NOW_SHOWING, UPCOMING, ENDED]
+          description: Filter by showing status
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Paginated list of movies
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovieListResponse'
+
+  /movies/cities:
+    get:
+      summary: List supported cities
+      description: Returns all cities where JoJo Cinema operates
+      responses:
+        '200':
+          description: List of cities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CitiesResponse'
+
+  /movies/{movieId}:
+    get:
+      summary: Get movie details
+      parameters:
+        - name: movieId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detailed movie information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovieDetailResponse'
+        '404':
+          description: Movie not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /shows:
+    get:
+      summary: Retrieve showtimes
+      description: Search showtimes by movie, city, theatre, or date
+      parameters:
+        - name: movieId
+          in: query
+          schema:
+            type: string
+        - name: city
+          in: query
+          schema:
+            type: string
+        - name: theatreId
+          in: query
+          schema:
+            type: string
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: YYYY-MM-DD
+      responses:
+        '200':
+          description: Matching showtimes grouped or listed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShowsResponse'
+
+  /shows/{showId}/seats:
+    get:
+      summary: Get seat map and availability for a show
+      description: Returns categorized rows, seat pricing, types, and current status (AVAILABLE, LOCKED, BOOKED)
+      parameters:
+        - name: showId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Full seat layout with live statuses
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeatMapResponse'
+
+  /seat-locks:
+    post:
+      summary: Atomically lock selected seats
+      description: Locks up to 6 seats for 5 minutes with a session token. Prevents concurrent double-booking.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeatLockRequest'
+      responses:
+        '201':
+          description: Seats locked successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeatLockResponse'
+        '409':
+          description: One or more seats already locked or booked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /seat-locks/{lockId}/release:
+    post:
+      summary: Release locked seats
+      description: Voluntarily unlocks seats if user abandons selection
+      parameters:
+        - name: lockId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sessionId]
+              properties:
+                sessionId:
+                  type: string
+      responses:
+        '200':
+          description: Seats released
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericSuccessResponse'
+
+  /bookings:
+    post:
+      summary: Create a booking from locked seats
+      description: Converts an active seat lock into a pending booking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookingRequest'
+      responses:
+        '201':
+          description: Booking created with status PENDING_PAYMENT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+        '400':
+          description: Invalid request or expired lock
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      summary: Get user bookings
+      description: Retrieve bookings for a session
+      parameters:
+        - name: sessionId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of session bookings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingListResponse'
+
+  /bookings/{bookingId}:
+    get:
+      summary: Get booking details
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: sessionId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Booking details with show and seat breakdown
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+
+  /payments/checkout:
+    post:
+      summary: Initiate payment checkout
+      description: Creates a payment intent with idempotency key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutRequest'
+      responses:
+        '201':
+          description: Payment initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResponse'
+
+  /payments/{paymentId}/status:
+    get:
+      summary: Check payment status
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Current payment status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentStatusResponse'
+
+  /payments/{paymentId}/simulate:
+    post:
+      summary: Simulate payment outcome (Demo mode)
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcome]
+              properties:
+                outcome:
+                  type: string
+                  enum: [SUCCESS, FAILED]
+      responses:
+        '200':
+          description: Simulated transition completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericSuccessResponse'
+
+  /bookings/{bookingId}/ticket:
+    get:
+      summary: Retrieve confirmed ticket and QR token
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Confirmed ticket with QR token and data URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponse'
+
+  /tickets/{ticketReference}/verify:
+    get:
+      summary: Verify ticket at cinema gate
+      parameters:
+        - name: ticketReference
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketVerifyResponse'
+
+components:
+  schemas:
+    ApiResponse:
+      type: object
+      required: [success, data, error]
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          nullable: true
+        error:
+          $ref: '#/components/schemas/ErrorObject'
+          nullable: true
+
+    ErrorObject:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          nullable: true
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          type: object
+          nullable: true
+          example: null
+        error:
+          $ref: '#/components/schemas/ErrorObject'
+
+    GenericSuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+        error:
+          type: object
+          nullable: true
+          example: null
+
+    HealthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+              example: ok
+            timestamp:
+              type: string
+            environment:
+              type: string
+            demoMode:
+              type: boolean
+
+    SeatLockRequest:
+      type: object
+      required: [showId, seatIds, sessionId]
+      properties:
+        showId:
+          type: string
+        seatIds:
+          type: array
+          items:
+            type: string
+          maxItems: 6
+        sessionId:
+          type: string
+
+    SeatLockResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            lockId:
+              type: string
+            showId:
+              type: string
+            lockedSeats:
+              type: array
+              items:
+                type: string
+            expiresAt:
+              type: string
+            lockDurationSeconds:
+              type: integer
+
+    CreateBookingRequest:
+      type: object
+      required: [lockId, sessionId]
+      properties:
+        lockId:
+          type: string
+        sessionId:
+          type: string
+
+    CheckoutRequest:
+      type: object
+      required: [bookingId, idempotencyKey]
+      properties:
+        bookingId:
+          type: string
+        idempotencyKey:
+          type: string
+        paymentMethod:
+          type: string
+          default: UPI
+
+    CheckoutResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            paymentId:
+              type: string
+            bookingId:
+              type: string
+            status:
+              type: string
+            amount:
+              type: number
+            currency:
+              type: string
+
+    PaymentStatusResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            paymentId:
+              type: string
+            bookingId:
+              type: string
+            bookingReference:
+              type: string
+            status:
+              type: string
+              enum: [PENDING, PROCESSING, SUCCESS, FAILED, REFUNDED]
+
+    TicketResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            ticketReference:
+              type: string
+            qrToken:
+              type: string
+            qrCodeDataUrl:
+              type: string
+            booking:
+              type: object
