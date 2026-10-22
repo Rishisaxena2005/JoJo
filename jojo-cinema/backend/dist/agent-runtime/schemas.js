@@ -10,6 +10,7 @@ exports.agentRunInputSchema = zod_1.z.object({
     message: zod_1.z.string().min(1).max(4000),
     conversationId: zod_1.z.string().min(1).max(128).optional(),
     history: zod_1.z.array(exports.conversationMessageSchema).max(20).default([]),
+    conversationState: zod_1.z.record(zod_1.z.unknown()).optional(),
 });
 exports.agentResultSchema = zod_1.z.object({
     status: zod_1.z.enum(['completed', 'waiting', 'failed']),

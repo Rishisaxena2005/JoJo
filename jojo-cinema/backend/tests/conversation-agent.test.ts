@@ -100,7 +100,7 @@ describe('Conversation and Intent Agent', () => {
     expect(response.response).toContain('PVR Orion Mall (Demo)');
     expect(response.response).toContain('₹220–₹350 per seat');
     expect(response.response).toContain('80 seats available');
-    expect(data.shows).toHaveBeenCalledWith('Raga of the Night', 'Bengaluru', 'today');
+    expect(data.shows).toHaveBeenCalledWith('Raga of the Night', 'Bengaluru', 'today', expect.objectContaining({ conversationId: 'chat-test' }));
   });
 
   it('does not silently substitute a prior city when an unknown city is explicit', async () => {
@@ -124,8 +124,31 @@ describe('Conversation and Intent Agent', () => {
         { role: 'assistant', content: 'Which city should I search in?' },
       ],
     }, context);
-    expect(data.shows).toHaveBeenCalledWith('Raga of the Night', 'Bengaluru', 'tomorrow');
+    expect(data.shows).toHaveBeenCalledWith('Raga of the Night', 'Bengaluru', 'tomorrow', expect.objectContaining({ conversationId: 'chat-test' }));
     expect(response.response).toContain('INOX Garuda Mall');
+  });
+
+  it('uses a short movie selection against the most recently presented movie list', async () => {
+    const data = fakeData();
+    const agent = new ConversationIntentAgent(undefined, data);
+    await agent.invoke({
+      message: 'Chai one',
+      history: [
+        { role: 'user', content: 'Everything' },
+        { role: 'assistant', content: 'Which city should I search in? Pune, Bengaluru.' },
+        { role: 'user', content: 'Bengaluru' },
+        { role: 'assistant', content: 'Movies currently showing in Bengaluru: Raga of the Night, Chai & Chutney. Which movie would you like to see?' },
+      ],
+    }, context);
+    expect(data.shows).toHaveBeenCalledWith('Chai & Chutney', 'Bengaluru', 'today', expect.anything());
+  });
+
+  it('answers a broad overview request without selecting a cinema tool', async () => {
+    const data = fakeData();
+    const agent = new ConversationIntentAgent(undefined, data);
+    const response = await agent.invoke({ message: 'Tell me everything', history: [] }, context);
+    expect(response.response).toContain('find movies');
+    expect(data.theatres).not.toHaveBeenCalled();
   });
 
   it('uses the model only as a fallback for ambiguous or general requests', async () => {

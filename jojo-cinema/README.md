@@ -118,6 +118,21 @@ cd backend
 npm test
 ```
 
+### Telegram conversation state
+
+The polling adapter stores recent chat history, a versioned conversation state, and processed Telegram update IDs in the `telegram_conversations` PostgreSQL table. This keeps chats isolated by Telegram chat and sender, preserves pending clarification state across restarts, and makes redelivered updates idempotent. Stale conversational context expires after 24 hours; confirmed bookings remain in the booking tables.
+
+After deploying a schema change, apply the migration and regenerate Prisma Client:
+
+```bash
+cd backend
+npm run db:migrate
+npm run db:generate
+npm run telegram:dev
+```
+
+Conversation-state and routing tests can run without a live model. The API integration tests require a reachable PostgreSQL database configured by `DATABASE_URL` and `DIRECT_URL`.
+
 ---
 
 ## 🤖 JoJo WhatsApp AI Agent Integration

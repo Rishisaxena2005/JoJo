@@ -150,30 +150,46 @@ class ConversationIntentAgent {
         // loses the movie and showtime intent.
         const recentUserContext = input.history.filter(item => item.role === 'user').slice(-6).map(item => item.content).join(' ');
         const effectiveMessage = isClarificationAnswer ? `${recentUserContext} ${message}` : message;
+        const selectedFromMovieList = /which movie|choose a movie|ask for a movie[’']?s showtimes|movie would you like/i.test(lastAssistant);
+        const selectedFromCinemaList = /cinemas showing|choose a cinema|cinema would you prefer|jojo cinema locations|cinemas in [\w ]+/i.test(lastAssistant);
+        const guidedBrowse = input.history.some(item => item.role === 'user' && /^(?:everything|all of it|all|anything|anything you can do|tell me everything)[!. ]*$/i.test(item.content.trim()))
+            && input.history.some(item => item.role === 'assistant' && /which city should i (?:check|search|look)/i.test(item.content));
         const toolContext = {
             runId: context.runId, conversationId: context.conversationId, agentId: this.id,
             agentName: this.name, signal: context.signal,
         };
-        if (/^(hi|hello|hey|good morning|good afternoon|good evening|namaste)[!. ]*$/i.test(message)) {
+        if (/^(?:hi|hello|hey)(?:\s+(?:there|jojo|everyone))?[!. ]*$/i.test(message)
+            || /^(?:good\s+morning|good\s+afternoon|good\s+evening|namaste)(?:\s+there)?[!. ]*$/i.test(message)) {
             return result({ response: 'Hi! 👋 I’m JoJo Cinema’s booking assistant. I can show movies, cities, cinemas, showtimes, and ticket prices, or help you book seats. What would you like to know?', intent: 'general_cinema_help' });
         }
-        if (/^(?:everything|all of it|all|anything|anything you can do|tell me everything)[!. ]*$/i.test(normalizedMessage)) {
+        if (/\b(?:everything|all of it|anything you can do|tell me everything|tell me all about it)\b/i.test(normalizedMessage)) {
             const availableCities = await this.data.cities();
             return result({
-                response: `I can help you explore movies, find cinemas, check showtimes and ticket prices, or book seats. JoJo Cinema currently has listings in ${cityList(availableCities) || 'several cities'}. What would you like to start with — movies, a particular film, or a city?`,
-                intent: 'general_cinema_help', evidence: availableCities,
+                response: `I can help you find movies, compare cinemas and showtimes, check prices, or book seats. Tell me a city, a movie, or what you’d like to do next. Available cities: ${cityList(availableCities) || 'currently unavailable'}.`,
+                intent: 'general_cinema_help', needsClarification: true, evidence: availableCities,
             });
         }
         const asksCities = /\b(which|what|list|available|covered|serve|have)\b.*\b(cities|city|locations)\b|\b(cities|locations)\s+(do you|are available|do jojo)\b/i.test(effectiveMessage);
         const asksTheatres = /\b(cinema|cinemas|theatre|theatres|theater|theaters|halls|venues|addresses)\b/i.test(effectiveMessage)
             && /\b(where|which|what|list|near|in|at|address|location|have)\b/i.test(effectiveMessage);
         const asksShowtimes = /\b(showtimes?|show\s+times?|show\s+timings?|timings?|schedule|screenings?|playing|showing|ticket\s+prices?|prices?|how\s+much|cost)\b/i.test(effectiveMessage)
-            || /\b(?:let'?s|i want to|i'd like to|wanna|want to)\s+(?:watch|see)\b/i.test(effectiveMessage);
+            || /\b(?:let'?s|i want to|i'd like to|wanna|want to)\s+(?:watch|see)\b/i.test(effectiveMessage)
+            || guidedBrowse;
         const asksMovies = /\b(movie|movies|film|films|watch|recommend|recommendation|suggest|showing|playing|listed|available|about|story|synopsis|details|directed)\b/i.test(effectiveMessage);
-        const cities = asksCities || asksTheatres || asksShowtimes || asksMovies || acceptsBookingOffer ? await this.data.cities() : [];
+        const cities = asksCities || asksTheatres || asksShowtimes || asksMovies || acceptsBookingOffer || selectedFromCinemaList || selectedFromMovieList ? await this.data.cities() : [];
         const bareCityAnswer = isClarificationAnswer && /\bwhich city\b/i.test(lastAssistant) && /^[A-Za-z][A-Za-z .'-]*$/.test(message);
         const currentCity = matchedByName(cities, message)
-            ?? (isClarificationAnswer && !bareCityAnswer ? matchedByName(cities, effectiveMessage) : undefined);
+            ?? (isClarificationAnswer && !bareCityAnswer ? matchedByName(cities, effectiveMessage) : undefined)
+            ?? matchedByName(cities, recentUserContext);
+        const choosingBrowseMovie = guidedBrowse && /which movie|choose a movie/i.test(lastAssistant);
+        if (guidedBrowse && currentCity && !choosingBrowseMovie && message.toLowerCase() === currentCity.name.toLowerCase()) {
+            const availableMovies = await this.data.movies(currentCity.name, context);
+            return result({
+                response: `${formatMovies(availableMovies, `Movies currently showing in ${currentCity.name}`)}\n\nWhich movie would you like to see? I’ll show the cinemas and showtimes available for it.`,
+                intent: 'movie_discovery', constraints: { city: currentCity.name }, needsClarification: true,
+                toolCalls: ['movie_search'], selectedTool: 'movie_search', evidence: availableMovies,
+            });
+        }
         if (acceptsBookingOffer) {
             if (!currentCity) {
                 return result({
@@ -189,7 +205,7 @@ class ConversationIntentAgent {
             });
         }
         const cityPhrase = requestedCity(message) ?? (bareCityAnswer ? message : undefined);
-        if (cityPhrase && !currentCity && (asksTheatres || asksShowtimes || asksMovies)) {
+        if (cityPhrase && !matchedByName(cities, cityPhrase) && (asksTheatres || asksShowtimes || asksMovies)) {
             return result({ response: cityNotFoundReply(cityPhrase, cities), intent: asksShowtimes ? 'showtime_search' : 'movie_discovery', constraints: { city: cityPhrase }, evidence: cities });
         }
         if (asksCities) {
@@ -202,11 +218,12 @@ class ConversationIntentAgent {
             const heading = currentCity ? `Cinemas in ${currentCity.name}` : 'JoJo Cinema locations';
             return result({ response: `${heading}:\n${theatres.map(theatre => `• ${theatre.name} — ${theatre.address}, ${theatre.city.name}`).join('\n')}`, intent: 'general_cinema_help', constraints: { city: currentCity?.name ?? null }, evidence: theatres });
         }
-        const movies = asksShowtimes || asksMovies ? await this.data.movies(currentCity?.name, context) : [];
-        const movie = matchedMovie(movies, effectiveMessage);
+        const resolvingListedChoice = selectedFromMovieList || selectedFromCinemaList;
+        const movies = asksShowtimes || asksMovies || resolvingListedChoice ? await this.data.movies(currentCity?.name, context) : [];
+        const movie = matchedMovie(movies, choosingBrowseMovie ? message : (resolvingListedChoice ? `${recentUserContext} ${message}` : effectiveMessage));
         const language = ['hindi', 'english', 'marathi', 'tamil', 'telugu', 'kannada', 'malayalam', 'bengali'].find(item => new RegExp(`\\b${item}\\b`, 'i').test(effectiveMessage));
         const genre = normalizeGenrePreference(effectiveMessage);
-        if (asksShowtimes) {
+        if (asksShowtimes || resolvingListedChoice) {
             if (!movie) {
                 if (movies.length)
                     return result({
@@ -224,6 +241,17 @@ class ConversationIntentAgent {
             }
             const date = requestedDate(effectiveMessage) ?? 'today';
             const shows = await this.data.shows(movie.title, currentCity?.name, date, context);
+            if (selectedFromCinemaList) {
+                const selectedTheatre = shows.find(show => {
+                    const name = normalized(show.screen?.theatre?.name ?? '');
+                    const choice = normalized(message).replace(/^(?:let'?s go for|go for|choose|select)\s+/, '');
+                    return name.includes(choice) || choice.includes(name);
+                })?.screen?.theatre?.name;
+                if (selectedTheatre) {
+                    const filtered = shows.filter(show => show.screen?.theatre?.name === selectedTheatre);
+                    return result({ response: `Great choice — here are the showtimes for ${movie.title} at ${selectedTheatre}:\n${formatShowtimeRecords(filtered)}`, intent: 'showtime_search', constraints: { movieTitle: movie.title, city: currentCity.name, theatre: selectedTheatre, date }, toolCalls: ['showtime_search'], selectedTool: 'showtime_search', evidence: filtered });
+                }
+            }
             return result({ response: formatShowtimeRecords(shows), intent: 'showtime_search', constraints: { movieTitle: movie.title, city: currentCity?.name ?? null, date }, toolCalls: ['showtime_search'], selectedTool: 'showtime_search', evidence: shows });
         }
         if (asksMovies) {
@@ -247,7 +275,7 @@ class ConversationIntentAgent {
         if (/^(yes|yeah|yep|sure|okay|ok)$/i.test(normalizedMessage) && /booking a movie at jojo cinema/i.test(previousAssistantMessage)) {
             return result({ response: 'Sure. Which movie would you like to book, and in which city?', intent: 'booking', needsClarification: true });
         }
-        const messages = (0, modelAdapter_1.makeConversationMessages)(input.history, input.message);
+        const messages = (0, modelAdapter_1.makeConversationMessages)(input.history, input.message, input.conversationState);
         const interpretationResult = await this.model.generate(schemas_1.conversationInterpretationSchema, messages, context.signal);
         const interpretation = schemas_1.conversationInterpretationSchema.parse(interpretationResult.value);
         const inputTokens = interpretationResult.usage.inputTokens;

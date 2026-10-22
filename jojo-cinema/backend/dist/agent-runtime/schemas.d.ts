@@ -22,6 +22,7 @@ export declare const agentRunInputSchema: z.ZodObject<{
         role: "user" | "assistant";
         content: string;
     }>, "many">>;
+    conversationState: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
 }, "strip", z.ZodTypeAny, {
     message: string;
     history: {
@@ -29,6 +30,7 @@ export declare const agentRunInputSchema: z.ZodObject<{
         content: string;
     }[];
     conversationId?: string | undefined;
+    conversationState?: Record<string, unknown> | undefined;
 }, {
     message: string;
     conversationId?: string | undefined;
@@ -36,6 +38,7 @@ export declare const agentRunInputSchema: z.ZodObject<{
         role: "user" | "assistant";
         content: string;
     }[] | undefined;
+    conversationState?: Record<string, unknown> | undefined;
 }>;
 export declare const agentResultSchema: z.ZodObject<{
     status: z.ZodEnum<["completed", "waiting", "failed"]>;

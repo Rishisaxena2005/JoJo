@@ -7,13 +7,13 @@ require("dotenv/config");
 const sharp_1 = __importDefault(require("sharp"));
 const bookingFlow_1 = require("./bookingFlow");
 const presentation_1 = require("./presentation");
+const conversationState_1 = require("./conversationState");
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token)
     throw new Error('Set TELEGRAM_BOT_TOKEN in backend/.env before starting the Telegram polling bot.');
 const apiBase = `https://api.telegram.org/bot${token}`;
 const cinemaApi = process.env.JOJO_BOOKING_API_BASE_URL ?? 'http://localhost:4000/api';
 const offsetState = { value: 0 };
-const histories = new Map();
 const MAX_HISTORY = 10;
 function bookingReplyText(reply) {
     return typeof reply === 'string' ? reply : reply.text;
@@ -53,13 +53,18 @@ async function handleMessage(update) {
     if (!message || !text || message.from?.is_bot)
         return;
     const chatId = String(message.chat.id);
-    const history = histories.get(chatId) ?? [];
+    const userId = String(message.from?.id ?? chatId);
     try {
+        const conversation = await (0, conversationState_1.loadTelegramConversation)(chatId, userId, update.update_id);
+        if (conversation.duplicate)
+            return;
+        const history = conversation.history;
+        const state = conversation.state;
         const bookingReply = await (0, bookingFlow_1.handleBookingMessage)(chatId, text, history);
         if (bookingReply) {
             const replyText = bookingReplyText(bookingReply);
             history.push({ role: 'user', content: text }, { role: 'assistant', content: replyText });
-            histories.set(chatId, history.slice(-MAX_HISTORY));
+            await (0, conversationState_1.saveTelegramConversation)({ chatId, userId, updateId: update.update_id, history: history.slice(-MAX_HISTORY), state: (0, conversationState_1.stateFromTurn)(state, text, replyText) });
             if (typeof bookingReply !== 'string' && bookingReply.photoSvg) {
                 const png = await (0, sharp_1.default)(Buffer.from(bookingReply.photoSvg)).png().toBuffer();
                 const formatted = (0, presentation_1.formatTelegramReply)(replyText);
@@ -86,7 +91,7 @@ async function handleMessage(update) {
         const response = await fetch(`${cinemaApi}/agent/chat`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ message: text, conversationId: `telegram-${chatId}`, history }),
+            body: JSON.stringify({ message: text, conversationId: `telegram-${chatId}-${userId}`, history, conversationState: state }),
         });
         const envelope = await response.json();
         if (!response.ok || !envelope.success || !envelope.data?.reply) {
@@ -100,7 +105,7 @@ async function handleMessage(update) {
             ? envelope.data.reply
             : 'Sorry, I could not look that up just now. Please try again in a moment.';
         history.push({ role: 'user', content: text }, { role: 'assistant', content: reply });
-        histories.set(chatId, history.slice(-MAX_HISTORY));
+        await (0, conversationState_1.saveTelegramConversation)({ chatId, userId, updateId: update.update_id, history: history.slice(-MAX_HISTORY), state: (0, conversationState_1.stateFromTurn)(state, text, reply) });
         const formatted = (0, presentation_1.formatTelegramReply)(reply, envelope.data?.presentation);
         await telegram('sendMessage', {
             chat_id: chatId,
@@ -113,7 +118,7 @@ async function handleMessage(update) {
         console.error('Could not handle Telegram message:', error instanceof Error ? error.message : 'unknown error');
         await telegram('sendMessage', {
             chat_id: chatId,
-            text: 'I could not reach JoJo Cinema right now. Please try again shortly.',
+            text: 'I hit a temporary problem while handling that. Your last request may not have been saved; please send it again.',
         }).catch(() => undefined);
     }
 }
@@ -127,13 +132,20 @@ async function handleCallback(update) {
     const chatId = String(callback.message.chat.id);
     if (callback.data?.startsWith('city|')) {
         const city = decodeURIComponent(callback.data.slice('city|'.length));
-        const history = histories.get(chatId) ?? [];
+        const userId = String(callback.from?.id ?? chatId);
+        const conversation = await (0, conversationState_1.loadTelegramConversation)(chatId, userId, update.update_id);
+        if (conversation.duplicate)
+            return;
+        const history = conversation.history;
         const response = await fetch(`${cinemaApi}/agent/chat`, {
             method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ message: `Which cinemas are in ${city}?`, conversationId: `telegram-${chatId}`, history }),
+            body: JSON.stringify({ message: `Which cinemas are in ${city}?`, conversationId: `telegram-${chatId}-${userId}`, history, conversationState: conversation.state }),
         });
         const envelope = await response.json();
         const formatted = (0, presentation_1.formatTelegramReply)(envelope.data?.reply ?? 'I couldn’t load that city right now.', envelope.data?.presentation);
+        const replyText = envelope.data?.reply ?? 'I couldn’t load that city right now.';
+        history.push({ role: 'user', content: `Which cinemas are in ${city}?` }, { role: 'assistant', content: replyText });
+        await (0, conversationState_1.saveTelegramConversation)({ chatId, userId, updateId: update.update_id, history, state: (0, conversationState_1.stateFromTurn)(conversation.state, city, replyText) });
         await telegram('editMessageText', {
             chat_id: chatId, message_id: callback.message.message_id,
             text: formatted.text.slice(0, 4000), parse_mode: 'HTML',
@@ -198,9 +210,11 @@ async function handleCallback(update) {
         });
     }
     if (typeof reply === 'string') {
-        const history = histories.get(chatId) ?? [];
+        const userId = String(callback.from?.id ?? chatId);
+        const conversation = await (0, conversationState_1.loadTelegramConversation)(chatId, userId, update.update_id);
+        const history = conversation.history;
         history.push({ role: 'assistant', content: reply });
-        histories.set(chatId, history.slice(-MAX_HISTORY));
+        await (0, conversationState_1.saveTelegramConversation)({ chatId, userId, updateId: update.update_id, history: history.slice(-MAX_HISTORY), state: (0, conversationState_1.stateFromTurn)(conversation.state, '', reply) });
     }
 }
 async function main() {

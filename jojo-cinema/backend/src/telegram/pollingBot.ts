@@ -2,6 +2,7 @@ import 'dotenv/config';
 import sharp from 'sharp';
 import { handleBookingCallback, handleBookingMessage, type BookingReply } from './bookingFlow';
 import { formatTelegramReply, type TelegramPresentation } from './presentation';
+import { loadTelegramConversation, saveTelegramConversation, stateFromTurn } from './conversationState';
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token) throw new Error('Set TELEGRAM_BOT_TOKEN in backend/.env before starting the Telegram polling bot.');
@@ -9,7 +10,6 @@ if (!token) throw new Error('Set TELEGRAM_BOT_TOKEN in backend/.env before start
 const apiBase = `https://api.telegram.org/bot${token}`;
 const cinemaApi = process.env.JOJO_BOOKING_API_BASE_URL ?? 'http://localhost:4000/api';
 const offsetState = { value: 0 };
-const histories = new Map<string, Array<{ role: 'user' | 'assistant'; content: string }>>();
 const MAX_HISTORY = 10;
 
 type TelegramUpdate = {
@@ -17,11 +17,12 @@ type TelegramUpdate = {
   message?: {
     text?: string;
     chat: { id: number | string };
-    from?: { is_bot?: boolean };
+    from?: { id?: number; is_bot?: boolean };
   };
   callback_query?: {
     id: string;
     data?: string;
+    from?: { id: number };
     message?: { message_id: number; chat: { id: number | string }; text?: string; caption?: string };
   };
 };
@@ -62,14 +63,18 @@ async function handleMessage(update: TelegramUpdate): Promise<void> {
   const text = message?.text?.trim();
   if (!message || !text || message.from?.is_bot) return;
   const chatId = String(message.chat.id);
-  const history = histories.get(chatId) ?? [];
+  const userId = String(message.from?.id ?? chatId);
 
   try {
+    const conversation = await loadTelegramConversation(chatId, userId, update.update_id);
+    if (conversation.duplicate) return;
+    const history = conversation.history;
+    const state = conversation.state;
     const bookingReply = await handleBookingMessage(chatId, text, history);
     if (bookingReply) {
       const replyText = bookingReplyText(bookingReply);
       history.push({ role: 'user', content: text }, { role: 'assistant', content: replyText });
-      histories.set(chatId, history.slice(-MAX_HISTORY));
+      await saveTelegramConversation({ chatId, userId, updateId: update.update_id, history: history.slice(-MAX_HISTORY), state: stateFromTurn(state, text, replyText) });
       if (typeof bookingReply !== 'string' && bookingReply.photoSvg) {
         const png = await sharp(Buffer.from(bookingReply.photoSvg)).png().toBuffer();
         const formatted = formatTelegramReply(replyText);
@@ -96,7 +101,7 @@ async function handleMessage(update: TelegramUpdate): Promise<void> {
     const response = await fetch(`${cinemaApi}/agent/chat`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ message: text, conversationId: `telegram-${chatId}`, history }),
+      body: JSON.stringify({ message: text, conversationId: `telegram-${chatId}-${userId}`, history, conversationState: state }),
     });
     const envelope = await response.json() as {
       success?: boolean;
@@ -115,7 +120,7 @@ async function handleMessage(update: TelegramUpdate): Promise<void> {
       : 'Sorry, I could not look that up just now. Please try again in a moment.';
 
     history.push({ role: 'user', content: text }, { role: 'assistant', content: reply });
-    histories.set(chatId, history.slice(-MAX_HISTORY));
+    await saveTelegramConversation({ chatId, userId, updateId: update.update_id, history: history.slice(-MAX_HISTORY), state: stateFromTurn(state, text, reply) });
     const formatted = formatTelegramReply(reply, envelope.data?.presentation);
     await telegram('sendMessage', {
       chat_id: chatId,
@@ -127,7 +132,7 @@ async function handleMessage(update: TelegramUpdate): Promise<void> {
     console.error('Could not handle Telegram message:', error instanceof Error ? error.message : 'unknown error');
     await telegram('sendMessage', {
       chat_id: chatId,
-      text: 'I could not reach JoJo Cinema right now. Please try again shortly.',
+      text: 'I hit a temporary problem while handling that. Your last request may not have been saved; please send it again.',
     }).catch(() => undefined);
   }
 }
@@ -140,13 +145,19 @@ async function handleCallback(update: TelegramUpdate): Promise<void> {
   const chatId = String(callback.message.chat.id);
   if (callback.data?.startsWith('city|')) {
     const city = decodeURIComponent(callback.data.slice('city|'.length));
-    const history = histories.get(chatId) ?? [];
+    const userId = String(callback.from?.id ?? chatId);
+    const conversation = await loadTelegramConversation(chatId, userId, update.update_id);
+    if (conversation.duplicate) return;
+    const history = conversation.history;
     const response = await fetch(`${cinemaApi}/agent/chat`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ message: `Which cinemas are in ${city}?`, conversationId: `telegram-${chatId}`, history }),
+      body: JSON.stringify({ message: `Which cinemas are in ${city}?`, conversationId: `telegram-${chatId}-${userId}`, history, conversationState: conversation.state }),
     });
     const envelope = await response.json() as { success?: boolean; data?: { reply?: string; presentation?: TelegramPresentation } };
     const formatted = formatTelegramReply(envelope.data?.reply ?? 'I couldn’t load that city right now.', envelope.data?.presentation);
+    const replyText = envelope.data?.reply ?? 'I couldn’t load that city right now.';
+    history.push({ role: 'user', content: `Which cinemas are in ${city}?` }, { role: 'assistant', content: replyText });
+    await saveTelegramConversation({ chatId, userId, updateId: update.update_id, history, state: stateFromTurn(conversation.state, city, replyText) });
     await telegram('editMessageText', {
       chat_id: chatId, message_id: callback.message.message_id,
       text: formatted.text.slice(0, 4000), parse_mode: 'HTML',
@@ -205,9 +216,11 @@ async function handleCallback(update: TelegramUpdate): Promise<void> {
     });
   }
   if (typeof reply === 'string') {
-    const history = histories.get(chatId) ?? [];
+    const userId = String(callback.from?.id ?? chatId);
+    const conversation = await loadTelegramConversation(chatId, userId, update.update_id);
+    const history = conversation.history;
     history.push({ role: 'assistant', content: reply });
-    histories.set(chatId, history.slice(-MAX_HISTORY));
+    await saveTelegramConversation({ chatId, userId, updateId: update.update_id, history: history.slice(-MAX_HISTORY), state: stateFromTurn(conversation.state, '', reply) });
   }
 }
 

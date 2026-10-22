@@ -446,7 +446,21 @@ async function finishDemoPayment(flow) {
         method: 'POST', body: JSON.stringify({ outcome: 'success' }),
     });
     const ticket = await api(`/bookings/${booking.bookingId}/ticket?sessionId=${encodeURIComponent(flow.sessionId)}`);
-    flows.delete(flow.chatId);
+    // Keep only the selected movie/show as conversational context so a follow-up
+    // booking for “the same show” can start fresh without reusing held seats.
+    flow.completedBooking = true;
+    flow.stage = 'choose_party';
+    flow.partySize = 0;
+    delete flow.lockId;
+    delete flow.seatIds;
+    delete flow.seatLabels;
+    delete flow.amount;
+    delete flow.bookingId;
+    delete flow.paymentId;
+    delete flow.seats;
+    delete flow.seatRows;
+    delete flow.selectedSeatLabels;
+    flows.set(flow.chatId, flow);
     return `Demo payment successful (simulated). Your booking is confirmed.\nMovie: ${flow.movie.title}\nShow: ${formatShow(flow.show, 0).replace(/^1\. /, '')}\nSeats: ${flow.seatLabels.join(', ')}\nTotal: ₹${booking.totalAmount}\nBooking reference: ${booking.bookingReference}\nTicket reference: ${ticket.ticketReference}`;
 }
 async function handleBookingMessage(chatId, text, history) {
@@ -460,6 +474,21 @@ async function handleBookingMessage(chatId, text, history) {
         }
         flows.delete(chatId);
         return 'Booking cancelled. Any active seat hold has been released.';
+    }
+    if (flow?.completedBooking && /\b(?:book|reserve|another|more|again|same)\b/i.test(message)) {
+        const sameShow = /\b(?:same|another|more|again)\b/i.test(message);
+        if (sameShow && flow.show && flow.movie) {
+            flow.completedBooking = false;
+            flow.stage = 'choose_party';
+            flow.partySize = Number(message.match(/\b([1-6])\s*(?:seats?|tickets?)\b/i)?.[1] ?? (/\banother\s+(?:ticket|seat)\b/i.test(message) ? 1 : 0));
+            flow.seats = undefined;
+            flow.seatRows = undefined;
+            flow.selectedSeatLabels = undefined;
+            flows.set(chatId, flow);
+            if (flow.partySize > 0)
+                return openSeatMap(flow);
+            return `Of course — we can book ${flow.movie.title} at the same show again. How many seats would you like?`;
+        }
     }
     // A new booking request should replace an unfinished flow instead of being
     // mistaken for a show number, a seat label, or a payment reply.

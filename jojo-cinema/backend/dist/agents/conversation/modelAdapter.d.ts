@@ -25,5 +25,5 @@ export declare class OpenAIStructuredModel implements StructuredModel {
 export declare function makeConversationMessages(history: Array<{
     role: 'user' | 'assistant';
     content: string;
-}>, current: string): BaseMessage[];
+}>, current: string, state?: Record<string, unknown>): BaseMessage[];
 //# sourceMappingURL=modelAdapter.d.ts.map

@@ -9,6 +9,7 @@ export const agentRunInputSchema = z.object({
   message: z.string().min(1).max(4000),
   conversationId: z.string().min(1).max(128).optional(),
   history: z.array(conversationMessageSchema).max(20).default([]),
+  conversationState: z.record(z.unknown()).optional(),
 });
 
 export const agentResultSchema = z.object({
