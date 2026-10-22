@@ -42,8 +42,21 @@ function matchedByName(items, text) {
 }
 function matchedMovie(movies, text) {
     const haystack = ` ${normalized(text)} `;
-    return movies.filter(movie => haystack.includes(` ${normalized(movie.title)} `))
+    const exact = movies.filter(movie => haystack.includes(` ${normalized(movie.title)} `))
         .sort((left, right) => right.title.length - left.title.length)[0];
+    if (exact)
+        return exact;
+    // Users commonly refer to a listed film by its distinctive first word
+    // (for example, “Kalki” for “Kalki Chronicles”). Ignore conversational
+    // filler and match only meaningful title words to avoid weak matches.
+    const stopWords = new Set(['lets', 'let', 'watch', 'see', 'this', 'that', 'the', 'movie', 'film', 'please', 'want', 'wanna', 'would', 'like', 'to', 'show', 'me', 'playing', 'in', 'at', 'for']);
+    const words = normalized(text).split(' ').filter(word => word.length >= 3 && !stopWords.has(word));
+    const candidates = movies.flatMap(movie => {
+        const titleWords = normalized(movie.title).split(' ');
+        const matched = words.filter(word => titleWords.some(titleWord => titleWord === word || (word.length >= 4 && titleWord.startsWith(word))));
+        return matched.length ? [{ movie, score: matched.length, titleLength: movie.title.length }] : [];
+    }).sort((left, right) => right.score - left.score || right.titleLength - left.titleLength);
+    return candidates[0]?.movie;
 }
 function requestedCity(text) {
     return text.match(/\b(?:in|at|around|near)\s+([A-Za-z][A-Za-z .'-]*?)(?=\s+(?:on|for|today|tonight|tomorrow|after|before|showing|playing|movie|cinema|theatre|theater)\b|[?!,]|$)/i)?.[1]?.trim();
@@ -127,9 +140,16 @@ class ConversationIntentAgent {
         const affirmative = /^(?:yes|yeah|yep|sure|okay|ok)(?:\s+please)?(?:\s+(?:in|at)\s+[a-z][a-z .'-]*)?[!. ]*$/i.test(message);
         const acceptsBookingOffer = affirmative
             && /(?:assistance with|help (?:you )?(?:with )?booking|help you book|booking a movie)/i.test(lastMeaningfulAssistant);
-        const isClarificationAnswer = message.length <= 100
-            && /\b(which city|which movie|what movie|showtimes or prices for|movie and city)\b/i.test(lastAssistant);
-        const effectiveMessage = isClarificationAnswer ? `${previousUser} ${message}` : message;
+        const pendingShowtimeOffer = /\b(?:would you like|shall i|want me to)\b/i.test(lastAssistant)
+            && /\b(showtimes?|prices?|cinema|theatre|theater)\b/i.test(lastAssistant);
+        const isClarificationAnswer = message.length <= 160
+            && (/\b(which city|which movie|what movie|showtimes? (?:or|and) prices? for|movie and city|what city)\b/i.test(lastAssistant)
+                || (pendingShowtimeOffer && /^(?:yes|yeah|yep|sure|okay|ok|go ahead|go for it|please)(?:[!. ]|$)/i.test(message)));
+        // Preserve the original request across short replies such as a city name
+        // or “yes, go for it”; retaining only the immediately previous user turn
+        // loses the movie and showtime intent.
+        const recentUserContext = input.history.filter(item => item.role === 'user').slice(-6).map(item => item.content).join(' ');
+        const effectiveMessage = isClarificationAnswer ? `${recentUserContext} ${message}` : message;
         const toolContext = {
             runId: context.runId, conversationId: context.conversationId, agentId: this.id,
             agentName: this.name, signal: context.signal,
@@ -137,10 +157,18 @@ class ConversationIntentAgent {
         if (/^(hi|hello|hey|good morning|good afternoon|good evening|namaste)[!. ]*$/i.test(message)) {
             return result({ response: 'Hi! 👋 I’m JoJo Cinema’s booking assistant. I can show movies, cities, cinemas, showtimes, and ticket prices, or help you book seats. What would you like to know?', intent: 'general_cinema_help' });
         }
+        if (/^(?:everything|all of it|all|anything|anything you can do|tell me everything)[!. ]*$/i.test(normalizedMessage)) {
+            const availableCities = await this.data.cities();
+            return result({
+                response: `I can help you explore movies, find cinemas, check showtimes and ticket prices, or book seats. JoJo Cinema currently has listings in ${cityList(availableCities) || 'several cities'}. What would you like to start with — movies, a particular film, or a city?`,
+                intent: 'general_cinema_help', evidence: availableCities,
+            });
+        }
         const asksCities = /\b(which|what|list|available|covered|serve|have)\b.*\b(cities|city|locations)\b|\b(cities|locations)\s+(do you|are available|do jojo)\b/i.test(effectiveMessage);
         const asksTheatres = /\b(cinema|cinemas|theatre|theatres|theater|theaters|halls|venues|addresses)\b/i.test(effectiveMessage)
             && /\b(where|which|what|list|near|in|at|address|location|have)\b/i.test(effectiveMessage);
-        const asksShowtimes = /\b(showtimes?|show\s+times?|show\s+timings?|timings?|schedule|screenings?|playing|showing|ticket\s+prices?|prices?|how\s+much|cost)\b/i.test(effectiveMessage);
+        const asksShowtimes = /\b(showtimes?|show\s+times?|show\s+timings?|timings?|schedule|screenings?|playing|showing|ticket\s+prices?|prices?|how\s+much|cost)\b/i.test(effectiveMessage)
+            || /\b(?:let'?s|i want to|i'd like to|wanna|want to)\s+(?:watch|see)\b/i.test(effectiveMessage);
         const asksMovies = /\b(movie|movies|film|films|watch|recommend|recommendation|suggest|showing|playing|listed|available|about|story|synopsis|details|directed)\b/i.test(effectiveMessage);
         const cities = asksCities || asksTheatres || asksShowtimes || asksMovies || acceptsBookingOffer ? await this.data.cities() : [];
         const bareCityAnswer = isClarificationAnswer && /\bwhich city\b/i.test(lastAssistant) && /^[A-Za-z][A-Za-z .'-]*$/.test(message);
@@ -187,6 +215,12 @@ class ConversationIntentAgent {
                         toolCalls: ['movie_search'], selectedTool: null, evidence: movies,
                     });
                 return result({ response: 'Which movie and city should I check for showtimes and prices?', intent: 'showtime_search', needsClarification: true, evidence: movies });
+            }
+            if (!currentCity) {
+                return result({
+                    response: `Sure — I can check ${movie.title}. Which city should I look in? JoJo Cinema currently has listings in: ${cityList(cities)}.`,
+                    intent: 'showtime_search', constraints: { movieTitle: movie.title }, needsClarification: true, evidence: [...cities, movie],
+                });
             }
             const date = requestedDate(effectiveMessage) ?? 'today';
             const shows = await this.data.shows(movie.title, currentCity?.name, date, context);
