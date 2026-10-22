@@ -20,6 +20,7 @@ const bookings_1 = __importDefault(require("./routes/bookings"));
 const payments_1 = __importDefault(require("./routes/payments"));
 const tickets_1 = __importDefault(require("./routes/tickets"));
 const agent_1 = __importDefault(require("./routes/agent"));
+const trains_1 = __importDefault(require("./routes/trains"));
 const app = (0, express_1.default)();
 // ─── Security ────────────────────────────────────────────────────────────────
 app.use((0, helmet_1.default)());
@@ -65,6 +66,7 @@ app.use('/api/bookings', bookings_1.default);
 app.use('/api/payments', payments_1.default);
 app.use('/api/tickets', tickets_1.default);
 app.use('/api/agent', agent_1.default);
+app.use('/api/trains', trains_1.default);
 // ─── API Info ────────────────────────────────────────────────────────────────
 app.get('/api', (_req, res) => {
     res.json({
@@ -92,6 +94,12 @@ app.get('/api', (_req, res) => {
             'POST /api/payments/webhook',
             'GET  /api/tickets/:ticketReference/verify',
             'POST /api/agent/chat',
+            'GET  /api/trains/stations?q=',
+            'GET  /api/trains/search?from=&to=&date=&passengers=',
+            'POST /api/trains/bookings',
+            'POST /api/trains/bookings/:bookingId/cancel',
+            'POST /api/trains/bookings/:bookingId/pay-demo',
+            'GET  /api/trains/bookings/:bookingId?sessionId=',
         ],
     });
 });

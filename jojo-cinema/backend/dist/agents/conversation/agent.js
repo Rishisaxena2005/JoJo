@@ -7,6 +7,7 @@ exports.ConversationIntentAgent = void 0;
 exports.validateInterpretation = validateInterpretation;
 const tool_1 = require("../../agent-runtime/tool");
 const cinema_1 = require("../../agent-tools/cinema");
+const trains_1 = require("../../agent-tools/trains");
 const database_1 = __importDefault(require("../../config/database"));
 const schemas_1 = require("./schemas");
 const modelAdapter_1 = require("./modelAdapter");
@@ -63,6 +64,14 @@ function requestedCity(text) {
 }
 function requestedDate(text) {
     return text.match(/\b(today|tonight|tomorrow|\d{4}-\d{2}-\d{2})\b/i)?.[1]?.toLocaleLowerCase();
+}
+function requestedTrainPartySize(text) {
+    const match = text.match(/\b(\d{1,3}|one|two|three|four|five|six)\s*(?:passengers?|people|persons?|travell?ers?|tickets?|seats?)\b/i)
+        ?? text.match(/\b(?:for|we are|there are|party of)\s*(\d{1,3}|one|two|three|four|five|six)\b/i);
+    if (!match)
+        return 1;
+    const words = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+    return Math.min(100, Math.max(1, words[match[1].toLowerCase()] ?? Number(match[1])));
 }
 function cityList(cities) {
     return cities.map(city => city.name).join(', ');
@@ -158,14 +167,45 @@ class ConversationIntentAgent {
             runId: context.runId, conversationId: context.conversationId, agentId: this.id,
             agentName: this.name, signal: context.signal,
         };
+        const routeMatch = message.match(/\bfrom\s+([\p{L}][\p{L} .'-]*?)\s+(?:to|towards)\s+([\p{L}][\p{L} .'-]*?)(?=\s+(?:on\s+)?(?:today|tonight|tomorrow|\d{4}-\d{2}-\d{2})\b|\s+(?:on|for|with)\b|[,.!?]|$)/iu)
+            ?? message.match(/^\s*(?:(?:find|show|book|search|train|trains|ticket|tickets|please|me|a|some|available|what|are|there)\s+)*(\p{L}[\p{L} .'-]*?)\s+to\s+(\p{L}[\p{L} .'-]*?)(?=\s+(?:on\s+)?(?:today|tonight|tomorrow|\d{4}-\d{2}-\d{2})\b|\s+(?:on|for|with)\b|[,.!?]|$)/iu);
+        const isTrainRequest = /\b(?:train|trains|railway|rail|by train)\b/i.test(effectiveMessage) || Boolean(routeMatch && /\bfrom\b/i.test(effectiveMessage));
+        if (isTrainRequest) {
+            if (!routeMatch)
+                return result({
+                    response: 'I can search sample JoJo train schedules and guide you through a demo booking. What are your origin and destination, travel date, and number of passengers? These are not live railway/IRCTC services.',
+                    intent: 'train_search', needsClarification: true,
+                });
+            const datePhrase = requestedDate(message) ?? requestedDate(effectiveMessage) ?? new Date().toISOString().slice(0, 10);
+            const date = /^\d{4}-\d{2}-\d{2}$/.test(datePhrase) ? datePhrase : (() => {
+                const offset = datePhrase === 'tomorrow' ? 1 : 0;
+                const now = new Date();
+                const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
+                const part = (type) => parts.find(value => value.type === type)?.value ?? '';
+                const day = new Date(`${part('year')}-${part('month')}-${part('day')}T00:00:00.000Z`);
+                day.setUTCDate(day.getUTCDate() + offset);
+                return day.toISOString().slice(0, 10);
+            })();
+            const passengers = requestedTrainPartySize(effectiveMessage);
+            const resultRows = await (0, tool_1.invokeTool)(trains_1.trainSearchTool, { fromStation: routeMatch[1].trim(), toStation: routeMatch[2].trim(), date, passengers }, toolContext);
+            const lines = resultRows.map((row, index) => {
+                const availableSeats = Number(row.availableSeats ?? 0);
+                const status = availableSeats === 0 ? 'SOLD OUT' : availableSeats < passengers ? `only ${availableSeats} left; not enough for this party` : availableSeats <= 10 ? `LIMITED (${availableSeats} left)` : `AVAILABLE (${availableSeats} left)`;
+                return `\n${index + 1}. ${row.train.name} (${row.train.number}) — ${row.classCode}\n   ${row.origin.name} ${new Date(row.departureAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })} → ${row.destination.name} ${new Date(row.arrivalAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })}; ${row.durationMinutes} min; ₹${row.farePerPassenger} per passenger; ${status}`;
+            });
+            return result({
+                response: resultRows.length ? `Sample JoJo train-demo options for ${routeMatch[1].trim()} to ${routeMatch[2].trim()} on ${date} for ${passengers} passenger${passengers === 1 ? '' : 's'} (each class has separate demo fares and availability; not live railway data):${lines.join('\n')}\n\nChoose an option number if you’d like to continue with a demo booking.` : `I couldn’t find a demo train for ${routeMatch[1].trim()} to ${routeMatch[2].trim()} on ${date} with ${passengers} passenger${passengers === 1 ? '' : 's'}. Try another date or station pair. These are synthetic schedules, not live rail inventory.`,
+                intent: 'train_search', constraints: { date, passengers }, selectedTool: 'train_search', toolCalls: ['train_search'], evidence: resultRows,
+            });
+        }
         if (/^(?:hi|hello|hey)(?:\s+(?:there|jojo|everyone))?[!. ]*$/i.test(message)
             || /^(?:good\s+morning|good\s+afternoon|good\s+evening|namaste)(?:\s+there)?[!. ]*$/i.test(message)) {
-            return result({ response: 'Hi! 👋 I’m JoJo Cinema’s booking assistant. I can show movies, cities, cinemas, showtimes, and ticket prices, or help you book seats. What would you like to know?', intent: 'general_cinema_help' });
+            return result({ response: 'Hi! 👋 I’m JoJo’s movie and train booking assistant. I can show movies, cities, cinemas, showtimes, and ticket prices, help you book movie seats, or search sample train schedules and guide you through a demo train booking. What would you like to do?', intent: 'general_cinema_help' });
         }
-        if (/\b(?:everything|all of it|anything you can do|tell me everything|tell me all about it)\b/i.test(normalizedMessage)) {
+        if (/\b(?:everything|all of it|anything you can do|tell me everything|tell me all about it|what can you do|how can you help|what do you help with)\b/i.test(normalizedMessage)) {
             const availableCities = await this.data.cities();
             return result({
-                response: `I can help you find movies, compare cinemas and showtimes, check prices, or book seats. Tell me a city, a movie, or what you’d like to do next. Available cities: ${cityList(availableCities) || 'currently unavailable'}.`,
+                response: `I can help you find movies, compare cinemas and showtimes, check prices, book movie seats, or search and demo-book sample train journeys. For trains, tell me your from/to cities or stations, travel date, and passenger count. Train schedules are synthetic demo data, not live railway availability. JoJo Cinema cities: ${cityList(availableCities) || 'currently unavailable'}. What would you like to do?`,
                 intent: 'general_cinema_help', needsClarification: true, evidence: availableCities,
             });
         }
@@ -283,7 +323,7 @@ class ConversationIntentAgent {
         if (interpretation.needsClarification) {
             return { ...result({ response: interpretation.clarificationQuestion ?? 'What would you like help with?', intent: interpretation.intent, needsClarification: true }), rationale: interpretation.rationale, usage: { inputTokens, outputTokens } };
         }
-        if (!interpretation.selectedTool || !['movie_discovery', 'showtime_search'].includes(interpretation.intent)) {
+        if (!interpretation.selectedTool || !['movie_discovery', 'showtime_search', 'train_search'].includes(interpretation.intent)) {
             return {
                 ...result({ response: interpretation.responseDraft, intent: interpretation.intent, needsClarification: interpretation.intent === 'unclear' }),
                 rationale: interpretation.rationale, usage: { inputTokens, outputTokens },
@@ -292,11 +332,14 @@ class ConversationIntentAgent {
         const toolArguments = Object.fromEntries(Object.entries(interpretation.toolArguments ?? {}).filter(([, value]) => value != null));
         const toolResult = interpretation.selectedTool === 'movie_search'
             ? await (0, tool_1.invokeTool)(cinema_1.movieSearchTool, toolArguments, toolContext)
-            : await (0, tool_1.invokeTool)(cinema_1.showtimeSearchTool, toolArguments, toolContext);
+            : interpretation.selectedTool === 'showtime_search'
+                ? await (0, tool_1.invokeTool)(cinema_1.showtimeSearchTool, toolArguments, toolContext)
+                : await (0, tool_1.invokeTool)(trains_1.trainSearchTool, toolArguments, toolContext);
         const records = Array.isArray(toolResult) ? toolResult : [];
         const response = interpretation.selectedTool === 'movie_search'
             ? formatMovies(records, 'Here are matching movies currently listed at JoJo Cinema')
-            : formatShowtimeRecords(records);
+            : interpretation.selectedTool === 'showtime_search' ? formatShowtimeRecords(records)
+                : `I found ${records.length} synthetic demo train/class options. These are not live railway schedules. ${records.map((item, index) => `${index + 1}. ${String(item.train?.name ?? 'Train')} (${String((item.classCode ?? ''))}) — ₹${Number(item.farePerPassenger ?? 0)}/passenger; ${Number(item.availableSeats ?? 0)} available (${String(item.availabilityStatus ?? 'UNKNOWN')})`).join('\n')}`;
         return {
             ...result({ response, intent: interpretation.intent, constraints: interpretation.constraints, selectedTool: interpretation.selectedTool, toolCalls: [interpretation.selectedTool], evidence: records }),
             rationale: 'Facts are formatted directly from verified cinema database results.', usage: { inputTokens, outputTokens },

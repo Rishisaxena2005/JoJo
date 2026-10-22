@@ -294,3 +294,77 @@ model TelegramConversation {
   @@index([lastActivityAt])
   @@map("telegram_conversations")
 }
+
+model RailStation {
+  id        String      @id @default(uuid())
+  code      String      @unique
+  name      String
+  city      String
+  state     String
+  origins   TrainInventory[] @relation("InventoryOrigin")
+  dests     TrainInventory[] @relation("InventoryDestination")
+  createdAt DateTime    @default(now())
+  @@index([name])
+  @@map("rail_stations")
+}
+
+model Train {
+  id        String      @id @default(uuid())
+  number    String      @unique
+  name      String
+  active    Boolean     @default(true)
+  inventories TrainInventory[]
+  createdAt DateTime    @default(now())
+  @@map("trains")
+}
+
+model TrainInventory {
+  id             String      @id @default(uuid())
+  trainId        String
+  originId       String
+  destinationId  String
+  journeyDate    DateTime    @db.Date
+  departureAt    DateTime
+  arrivalAt      DateTime
+  classCode      String
+  totalSeats     Int
+  availableSeats Int
+  farePerPassenger Decimal   @db.Decimal(10, 2)
+  updatedAt      DateTime    @updatedAt
+  train          Train       @relation(fields: [trainId], references: [id])
+  origin         RailStation @relation("InventoryOrigin", fields: [originId], references: [id])
+  destination    RailStation @relation("InventoryDestination", fields: [destinationId], references: [id])
+  bookings       TrainBooking[]
+  @@unique([trainId, originId, destinationId, journeyDate, classCode])
+  @@index([originId, destinationId, journeyDate])
+  @@map("train_inventory")
+}
+
+model TrainBooking {
+  id             String         @id @default(uuid())
+  reference      String         @unique
+  idempotencyKey String         @unique
+  sessionId      String
+  inventoryId    String
+  passengerCount Int
+  passengers     Json
+  totalFare      Decimal        @db.Decimal(10, 2)
+  status         String         @default("PENDING_PAYMENT")
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  inventory      TrainInventory @relation(fields: [inventoryId], references: [id])
+  payment        TrainPayment?
+  @@index([sessionId, status])
+  @@map("train_bookings")
+}
+
+model TrainPayment {
+  id          String       @id @default(uuid())
+  bookingId   String       @unique
+  status      String       @default("PENDING")
+  outcome     String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  booking     TrainBooking @relation(fields: [bookingId], references: [id])
+  @@map("train_payments")
+}

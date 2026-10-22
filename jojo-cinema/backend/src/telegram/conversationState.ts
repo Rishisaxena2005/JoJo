@@ -14,6 +14,26 @@ export const conversationStateSchema = z.object({
   pendingQuestion: z.object({ type: z.string().max(60), prompt: z.string().max(500) }).nullable().default(null),
   presentedOptions: z.array(z.object({ id: z.string().max(160), label: z.string().max(200), type: z.enum(['movie', 'city', 'theatre', 'showtime', 'seat']) })).max(30).default([]),
   lastTool: z.string().max(80).nullable().default(null),
+  trainTask: z.object({
+    stage: z.enum(['route', 'date', 'passenger_count', 'option', 'passengers', 'review', 'payment']).default('route'),
+    origin: z.string().max(100).nullable().default(null), destination: z.string().max(100).nullable().default(null),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null), passengerCount: z.number().int().min(1).max(100).nullable().default(null),
+    passengers: z.array(z.object({
+      name: z.string().max(100), age: z.number().int().min(1).max(120),
+      category: z.enum(['ADULT', 'CHILD', 'SENIOR']),
+      gender: z.enum(['MALE', 'FEMALE', 'OTHER', 'UNSPECIFIED']).default('UNSPECIFIED'),
+      berthPreference: z.enum(['LOWER', 'MIDDLE', 'UPPER', 'SIDE_LOWER', 'SIDE_UPPER', 'NO_PREFERENCE']).default('NO_PREFERENCE'),
+    })).max(100).default([]),
+    options: z.array(z.object({ inventoryId: z.string().uuid(), trainName: z.string(), trainNumber: z.string(), originName: z.string(), destinationName: z.string(), departureAt: z.string(), arrivalAt: z.string(), durationMinutes: z.number(), classCode: z.string(), availableSeats: z.number(), farePerPassenger: z.number() })).max(30).default([]),
+    selectedInventoryId: z.string().uuid().nullable().default(null), bookingId: z.string().uuid().nullable().default(null), bookingReference: z.string().nullable().default(null),
+  }).nullable().default(null),
+  lastTrainBooking: z.object({
+    bookingId: z.string().uuid(), reference: z.string(), inventoryId: z.string().uuid(),
+    trainName: z.string(), trainNumber: z.string(), origin: z.string(), destination: z.string(),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), classCode: z.string(),
+    departureAt: z.string(), arrivalAt: z.string(), farePerPassenger: z.number().nonnegative(),
+    passengerCount: z.number().int().min(1).max(100),
+  }).nullable().default(null),
   updatedAt: z.string().datetime().nullable().default(null),
 }).strict();
 

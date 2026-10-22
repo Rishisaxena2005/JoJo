@@ -42,6 +42,17 @@ export function createAgentRuntime(agent: Agent, options: AgentRuntimeOptions) {
         const estimatedCostUsd = (result.usage.inputTokens * options.inputCostPer1MUsd + result.usage.outputTokens * options.outputCostPer1MUsd) / 1_000_000;
         if (estimatedCostUsd > options.maxCostUsd) throw new Error('Configured per-run model cost limit exceeded');
         const durationMs = Date.now() - startedAt;
+        const decision = result.decision ?? {};
+        const safeCode = (value: unknown) => typeof value === 'string' && /^[a-zA-Z][a-zA-Z0-9_.:-]{0,63}$/.test(value) ? value : undefined;
+        const intent = safeCode(decision.intent);
+        const selectedTool = safeCode(decision.selectedTool);
+        const needsClarification = decision.needsClarification === true;
+        createAgentEvent({
+          runId: state.runId, conversationId: state.conversationId, agentId: agent.id, agentName: agent.name,
+          eventType: 'agent.decided', status: 'completed',
+          summary: [intent ? `Intent: ${intent}` : 'Intent classified', selectedTool ? `route: ${selectedTool}` : undefined, needsClarification ? 'clarification needed' : undefined].filter(Boolean).join(' · '),
+          ...(selectedTool ? { toolName: selectedTool } : {}),
+        });
         createAgentEvent({ runId: state.runId, conversationId: state.conversationId, agentId: agent.id, agentName: agent.name, eventType: 'agent.completed', status: result.status, summary: `Agent returned ${result.status}`, replyPreview: result.response.slice(0, 500), durationMs, tokenUsage: { input: result.usage.inputTokens, output: result.usage.outputTokens }, estimatedCostUsd });
         return { result };
       } catch (error) {
@@ -57,10 +68,14 @@ export function createAgentRuntime(agent: Agent, options: AgentRuntimeOptions) {
     .compile();
 
   return {
-    async run(rawInput: unknown): Promise<AgentRunResult> {
+    async run(rawInput: unknown, runOptions: { runId?: string } = {}): Promise<AgentRunResult> {
       const input = agentRunInputSchema.parse(rawInput);
       const startedAt = Date.now();
-      const runId = newRunId();
+      // A channel adapter may supply its UUID so channel, agent, tool, and
+      // workflow events form one end-to-end trace without accepting arbitrary IDs.
+      const runId = runOptions.runId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(runOptions.runId)
+        ? runOptions.runId
+        : newRunId();
       const conversationId = input.conversationId ?? randomUUID();
       createAgentEvent({ runId, conversationId, agentId: 'orchestrator', agentName: 'Agent runtime', eventType: 'run.started', status: 'running', summary: 'Agent run started' });
       try {

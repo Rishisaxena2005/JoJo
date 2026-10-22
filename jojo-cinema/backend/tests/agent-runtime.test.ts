@@ -6,6 +6,7 @@ import { invokeTool } from '../src/agent-runtime/tool';
 import { mockMovieSearchTool, mockShowtimeSearchTool } from '../src/agent-tools/mockCinema';
 import { invokeTool, type AgentTool } from '../src/agent-runtime/tool';
 import { z } from 'zod';
+import { getRecentAgentEvents } from '../src/agent-runtime/events';
 
 const successfulAgent: Agent = {
   id: 'test-agent',
@@ -60,6 +61,25 @@ describe('LangGraph agent runtime', () => {
     expect(result.runId).toBeTruthy();
     expect(result.conversationId).toBeTruthy();
     expect(result.result.response).toBe('Received: Hello');
+  });
+
+  it('correlates trusted channel IDs and emits a safe structured decision event', async () => {
+    const agent: Agent = {
+      ...successfulAgent,
+      async invoke() {
+        return {
+          status: 'completed', response: 'Here are the available movies.', usage: { inputTokens: 4, outputTokens: 6 },
+          decision: { intent: 'movie_discovery', selectedTool: 'movie_search', needsClarification: false },
+        };
+      },
+    };
+    const runtime = createAgentRuntime(agent, { timeoutMs: 500, maxCostUsd: 1, inputCostPer1MUsd: 0.1, outputCostPer1MUsd: 0.5 });
+    const runId = '123e4567-e89b-12d3-a456-426614174000';
+    const run = await runtime.run({ message: 'Show movies' }, { runId });
+    expect(run.runId).toBe(runId);
+    expect(getRecentAgentEvents(20).some(event => event.runId === runId
+      && event.eventType === 'agent.decided'
+      && event.summary === 'Intent: movie_discovery · route: movie_search')).toBe(true);
   });
 
   it('rejects runs that exceed configured cost budget', async () => {

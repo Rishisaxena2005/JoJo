@@ -4,7 +4,7 @@ exports.groundedResponseSchema = exports.conversationInterpretationSchema = expo
 const zod_1 = require("zod");
 exports.intentSchema = zod_1.z.enum([
     'movie_discovery', 'showtime_search', 'seat_selection', 'booking',
-    'booking_support', 'general_cinema_help', 'out_of_domain', 'unclear',
+    'booking_support', 'train_search', 'general_cinema_help', 'out_of_domain', 'unclear',
 ]);
 exports.conversationInterpretationSchema = zod_1.z.object({
     intent: exports.intentSchema,
@@ -19,7 +19,7 @@ exports.conversationInterpretationSchema = zod_1.z.object({
     }),
     needsClarification: zod_1.z.boolean(),
     clarificationQuestion: zod_1.z.string().max(500).nullable(),
-    selectedTool: zod_1.z.enum(['movie_search', 'showtime_search']).nullable(),
+    selectedTool: zod_1.z.enum(['movie_search', 'showtime_search', 'train_search']).nullable(),
     toolArguments: zod_1.z.object({
         query: zod_1.z.string().max(80).nullable().optional(),
         city: zod_1.z.string().max(80).nullable().optional(),
@@ -27,6 +27,9 @@ exports.conversationInterpretationSchema = zod_1.z.object({
         date: zod_1.z.string().max(40).nullable().optional(),
         language: zod_1.z.string().max(50).nullable().optional(),
         genre: zod_1.z.string().max(50).nullable().optional(),
+        fromStation: zod_1.z.string().max(100).nullable().optional(),
+        toStation: zod_1.z.string().max(100).nullable().optional(),
+        passengers: zod_1.z.number().int().min(1).max(100).nullable().optional(),
     }).strict().nullable(),
     responseDraft: zod_1.z.string().max(2000),
     rationale: zod_1.z.string().max(500),

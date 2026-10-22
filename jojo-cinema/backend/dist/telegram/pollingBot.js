@@ -8,6 +8,7 @@ const sharp_1 = __importDefault(require("sharp"));
 const bookingFlow_1 = require("./bookingFlow");
 const presentation_1 = require("./presentation");
 const conversationState_1 = require("./conversationState");
+const trainBookingFlow_1 = require("./trainBookingFlow");
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token)
     throw new Error('Set TELEGRAM_BOT_TOKEN in backend/.env before starting the Telegram polling bot.');
@@ -60,11 +61,33 @@ async function handleMessage(update) {
             return;
         const history = conversation.history;
         const state = conversation.state;
+        const trainResult = await (0, trainBookingFlow_1.handleTrainBookingMessage)(chatId, userId, text, state);
+        if (trainResult.handled) {
+            const reply = trainResult.reply ?? 'I’m here to help with your train search.';
+            history.push({ role: 'user', content: text }, { role: 'assistant', content: reply });
+            await (0, conversationState_1.saveTelegramConversation)({ chatId, userId, updateId: update.update_id, history: history.slice(-MAX_HISTORY), state: trainResult.state });
+            const formatted = (0, presentation_1.formatTelegramReply)(reply);
+            const replyMarkup = trainResult.keyboard
+                ? {
+                    keyboard: trainResult.keyboard.map(row => row.map(label => ({ text: label }))),
+                    resize_keyboard: true,
+                    one_time_keyboard: true,
+                    input_field_placeholder: 'Choose or type a response',
+                }
+                : { remove_keyboard: true };
+            await telegram('sendMessage', { chat_id: chatId, text: formatted.text.slice(0, 4000), parse_mode: 'HTML', reply_markup: replyMarkup });
+            return;
+        }
+        // The user may explicitly switch from an in-progress train flow to cinema.
+        const activeState = trainResult.state;
+        if (state.trainTask && !activeState.trainTask) {
+            await telegram('sendMessage', { chat_id: chatId, text: 'Okay—switching to movie and cinema help.', reply_markup: { remove_keyboard: true } });
+        }
         const bookingReply = await (0, bookingFlow_1.handleBookingMessage)(chatId, text, history);
         if (bookingReply) {
             const replyText = bookingReplyText(bookingReply);
             history.push({ role: 'user', content: text }, { role: 'assistant', content: replyText });
-            await (0, conversationState_1.saveTelegramConversation)({ chatId, userId, updateId: update.update_id, history: history.slice(-MAX_HISTORY), state: (0, conversationState_1.stateFromTurn)(state, text, replyText) });
+            await (0, conversationState_1.saveTelegramConversation)({ chatId, userId, updateId: update.update_id, history: history.slice(-MAX_HISTORY), state: (0, conversationState_1.stateFromTurn)(activeState, text, replyText) });
             if (typeof bookingReply !== 'string' && bookingReply.photoSvg) {
                 const png = await (0, sharp_1.default)(Buffer.from(bookingReply.photoSvg)).png().toBuffer();
                 const formatted = (0, presentation_1.formatTelegramReply)(replyText);
@@ -91,7 +114,7 @@ async function handleMessage(update) {
         const response = await fetch(`${cinemaApi}/agent/chat`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ message: text, conversationId: `telegram-${chatId}-${userId}`, history, conversationState: state }),
+            body: JSON.stringify({ message: text, conversationId: `telegram-${chatId}-${userId}`, history, conversationState: activeState }),
         });
         const envelope = await response.json();
         if (!response.ok || !envelope.success || !envelope.data?.reply) {
@@ -105,7 +128,7 @@ async function handleMessage(update) {
             ? envelope.data.reply
             : 'Sorry, I could not look that up just now. Please try again in a moment.';
         history.push({ role: 'user', content: text }, { role: 'assistant', content: reply });
-        await (0, conversationState_1.saveTelegramConversation)({ chatId, userId, updateId: update.update_id, history: history.slice(-MAX_HISTORY), state: (0, conversationState_1.stateFromTurn)(state, text, reply) });
+        await (0, conversationState_1.saveTelegramConversation)({ chatId, userId, updateId: update.update_id, history: history.slice(-MAX_HISTORY), state: (0, conversationState_1.stateFromTurn)(activeState, text, reply) });
         const formatted = (0, presentation_1.formatTelegramReply)(reply, envelope.data?.presentation);
         await telegram('sendMessage', {
             chat_id: chatId,

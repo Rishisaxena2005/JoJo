@@ -133,6 +133,20 @@ npm run telegram:dev
 
 Conversation-state and routing tests can run without a live model. The API integration tests require a reachable PostgreSQL database configured by `DATABASE_URL` and `DIRECT_URL`.
 
+### Train demo API
+
+The same backend includes a synthetic train-booking vertical slice. The seeded schedules, fares, seat counts, and booking statuses are demo data, not live railway availability or an IRCTC connection. Apply the Prisma schema and seed train inventory with:
+
+```bash
+cd backend
+npm run db:push
+node ./node_modules/tsx/dist/cli.mjs prisma/seed-trains.ts
+```
+
+Endpoints are `GET /api/trains/stations?q=Pune`, `GET /api/trains/search?from=PUNE&to=CSMT&date=YYYY-MM-DD&passengers=1`, `POST /api/trains/bookings`, `POST /api/trains/bookings/:bookingId/cancel`, `POST /api/trains/bookings/:bookingId/pay-demo`, and `GET /api/trains/bookings/:bookingId?sessionId=...`. The seed provides 12 Indian stations, 18 synthetic train services in both directions, and a rolling 120-day timetable. Fares, seat capacities, remaining availability, and booking status are tracked separately for each train class (for example 2S, CC, EC, SL, 3A, 2A, and 1A). Booking a class reserves only that class's inventory; a successful simulated payment marks that booking `CONFIRMED` and its confirmation includes the selected class and fare. Search results include class-specific fare, total/available seats, and an availability label, plus a `demo: true` marker. Train bookings require passenger names and ages and use demo payment only.
+
+In Telegram, say “train booking” or “find trains” to start. The guided order is origin → destination → date → train/class → passenger count → passenger details → review → payment. Telegram choice keyboards are used for seeded stations, near/future dates (including +30, +60, +90, and +120 days), train/classes, passenger-count quick picks, confirmation, and demo payment; users can type station names/codes or dates within the rolling 120-day window, and enter a count up to 100. Group passenger manifests can be pasted as one passenger per line or separated with semicolons, with optional gender and berth preference (for example `Asha, 28, F, Lower`). The demo booking API accepts up to 100 passengers, subject to the selected sample inventory’s class-specific availability. A separate `PAY DEMO` step is required to simulate payment. The bot can answer the last demo booking’s status/reference and carry the last route forward when the user asks for more tickets; a pending demo hold can be cancelled. Movie and cinema requests continue through the cinema flow, and the user can switch between the two. Current train journeys are synthetic demos only—no live railway inventory, real payment, ticket issuance, return trips, or live cancellation/refunds are supported.
+
 ---
 
 ## 🤖 JoJo WhatsApp AI Agent Integration

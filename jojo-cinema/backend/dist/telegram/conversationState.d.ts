@@ -52,6 +52,173 @@ export declare const conversationStateSchema: z.ZodObject<{
         label: string;
     }>, "many">>;
     lastTool: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    trainTask: z.ZodDefault<z.ZodNullable<z.ZodObject<{
+        stage: z.ZodDefault<z.ZodEnum<["route", "date", "passenger_count", "option", "passengers", "review", "payment"]>>;
+        origin: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        destination: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        date: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        passengerCount: z.ZodDefault<z.ZodNullable<z.ZodNumber>>;
+        passengers: z.ZodDefault<z.ZodArray<z.ZodObject<{
+            name: z.ZodString;
+            age: z.ZodNumber;
+            category: z.ZodEnum<["ADULT", "CHILD", "SENIOR"]>;
+            gender: z.ZodDefault<z.ZodEnum<["MALE", "FEMALE", "OTHER", "UNSPECIFIED"]>>;
+            berthPreference: z.ZodDefault<z.ZodEnum<["LOWER", "MIDDLE", "UPPER", "SIDE_LOWER", "SIDE_UPPER", "NO_PREFERENCE"]>>;
+        }, "strip", z.ZodTypeAny, {
+            name: string;
+            age: number;
+            category: "ADULT" | "CHILD" | "SENIOR";
+            gender: "MALE" | "FEMALE" | "OTHER" | "UNSPECIFIED";
+            berthPreference: "LOWER" | "MIDDLE" | "UPPER" | "SIDE_LOWER" | "SIDE_UPPER" | "NO_PREFERENCE";
+        }, {
+            name: string;
+            age: number;
+            category: "ADULT" | "CHILD" | "SENIOR";
+            gender?: "MALE" | "FEMALE" | "OTHER" | "UNSPECIFIED" | undefined;
+            berthPreference?: "LOWER" | "MIDDLE" | "UPPER" | "SIDE_LOWER" | "SIDE_UPPER" | "NO_PREFERENCE" | undefined;
+        }>, "many">>;
+        options: z.ZodDefault<z.ZodArray<z.ZodObject<{
+            inventoryId: z.ZodString;
+            trainName: z.ZodString;
+            trainNumber: z.ZodString;
+            originName: z.ZodString;
+            destinationName: z.ZodString;
+            departureAt: z.ZodString;
+            arrivalAt: z.ZodString;
+            durationMinutes: z.ZodNumber;
+            classCode: z.ZodString;
+            availableSeats: z.ZodNumber;
+            farePerPassenger: z.ZodNumber;
+        }, "strip", z.ZodTypeAny, {
+            durationMinutes: number;
+            departureAt: string;
+            arrivalAt: string;
+            classCode: string;
+            availableSeats: number;
+            farePerPassenger: number;
+            inventoryId: string;
+            trainName: string;
+            trainNumber: string;
+            originName: string;
+            destinationName: string;
+        }, {
+            durationMinutes: number;
+            departureAt: string;
+            arrivalAt: string;
+            classCode: string;
+            availableSeats: number;
+            farePerPassenger: number;
+            inventoryId: string;
+            trainName: string;
+            trainNumber: string;
+            originName: string;
+            destinationName: string;
+        }>, "many">>;
+        selectedInventoryId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        bookingId: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        bookingReference: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+    }, "strip", z.ZodTypeAny, {
+        options: {
+            durationMinutes: number;
+            departureAt: string;
+            arrivalAt: string;
+            classCode: string;
+            availableSeats: number;
+            farePerPassenger: number;
+            inventoryId: string;
+            trainName: string;
+            trainNumber: string;
+            originName: string;
+            destinationName: string;
+        }[];
+        date: string | null;
+        bookingId: string | null;
+        bookingReference: string | null;
+        passengers: {
+            name: string;
+            age: number;
+            category: "ADULT" | "CHILD" | "SENIOR";
+            gender: "MALE" | "FEMALE" | "OTHER" | "UNSPECIFIED";
+            berthPreference: "LOWER" | "MIDDLE" | "UPPER" | "SIDE_LOWER" | "SIDE_UPPER" | "NO_PREFERENCE";
+        }[];
+        origin: string | null;
+        destination: string | null;
+        passengerCount: number | null;
+        stage: "date" | "payment" | "route" | "passengers" | "passenger_count" | "option" | "review";
+        selectedInventoryId: string | null;
+    }, {
+        options?: {
+            durationMinutes: number;
+            departureAt: string;
+            arrivalAt: string;
+            classCode: string;
+            availableSeats: number;
+            farePerPassenger: number;
+            inventoryId: string;
+            trainName: string;
+            trainNumber: string;
+            originName: string;
+            destinationName: string;
+        }[] | undefined;
+        date?: string | null | undefined;
+        bookingId?: string | null | undefined;
+        bookingReference?: string | null | undefined;
+        passengers?: {
+            name: string;
+            age: number;
+            category: "ADULT" | "CHILD" | "SENIOR";
+            gender?: "MALE" | "FEMALE" | "OTHER" | "UNSPECIFIED" | undefined;
+            berthPreference?: "LOWER" | "MIDDLE" | "UPPER" | "SIDE_LOWER" | "SIDE_UPPER" | "NO_PREFERENCE" | undefined;
+        }[] | undefined;
+        origin?: string | null | undefined;
+        destination?: string | null | undefined;
+        passengerCount?: number | null | undefined;
+        stage?: "date" | "payment" | "route" | "passengers" | "passenger_count" | "option" | "review" | undefined;
+        selectedInventoryId?: string | null | undefined;
+    }>>>;
+    lastTrainBooking: z.ZodDefault<z.ZodNullable<z.ZodObject<{
+        bookingId: z.ZodString;
+        reference: z.ZodString;
+        inventoryId: z.ZodString;
+        trainName: z.ZodString;
+        trainNumber: z.ZodString;
+        origin: z.ZodString;
+        destination: z.ZodString;
+        date: z.ZodString;
+        classCode: z.ZodString;
+        departureAt: z.ZodString;
+        arrivalAt: z.ZodString;
+        farePerPassenger: z.ZodNumber;
+        passengerCount: z.ZodNumber;
+    }, "strip", z.ZodTypeAny, {
+        date: string;
+        bookingId: string;
+        departureAt: string;
+        arrivalAt: string;
+        classCode: string;
+        farePerPassenger: number;
+        origin: string;
+        destination: string;
+        inventoryId: string;
+        reference: string;
+        passengerCount: number;
+        trainName: string;
+        trainNumber: string;
+    }, {
+        date: string;
+        bookingId: string;
+        departureAt: string;
+        arrivalAt: string;
+        classCode: string;
+        farePerPassenger: number;
+        origin: string;
+        destination: string;
+        inventoryId: string;
+        reference: string;
+        passengerCount: number;
+        trainName: string;
+        trainNumber: string;
+    }>>>;
     updatedAt: z.ZodDefault<z.ZodNullable<z.ZodString>>;
 }, "strict", z.ZodTypeAny, {
     updatedAt: string | null;
@@ -77,6 +244,51 @@ export declare const conversationStateSchema: z.ZodObject<{
         label: string;
     }[];
     lastTool: string | null;
+    trainTask: {
+        options: {
+            durationMinutes: number;
+            departureAt: string;
+            arrivalAt: string;
+            classCode: string;
+            availableSeats: number;
+            farePerPassenger: number;
+            inventoryId: string;
+            trainName: string;
+            trainNumber: string;
+            originName: string;
+            destinationName: string;
+        }[];
+        date: string | null;
+        bookingId: string | null;
+        bookingReference: string | null;
+        passengers: {
+            name: string;
+            age: number;
+            category: "ADULT" | "CHILD" | "SENIOR";
+            gender: "MALE" | "FEMALE" | "OTHER" | "UNSPECIFIED";
+            berthPreference: "LOWER" | "MIDDLE" | "UPPER" | "SIDE_LOWER" | "SIDE_UPPER" | "NO_PREFERENCE";
+        }[];
+        origin: string | null;
+        destination: string | null;
+        passengerCount: number | null;
+        stage: "date" | "payment" | "route" | "passengers" | "passenger_count" | "option" | "review";
+        selectedInventoryId: string | null;
+    } | null;
+    lastTrainBooking: {
+        date: string;
+        bookingId: string;
+        departureAt: string;
+        arrivalAt: string;
+        classCode: string;
+        farePerPassenger: number;
+        origin: string;
+        destination: string;
+        inventoryId: string;
+        reference: string;
+        passengerCount: number;
+        trainName: string;
+        trainNumber: string;
+    } | null;
 }, {
     updatedAt?: string | null | undefined;
     schemaVersion?: 1 | undefined;
@@ -101,6 +313,51 @@ export declare const conversationStateSchema: z.ZodObject<{
         label: string;
     }[] | undefined;
     lastTool?: string | null | undefined;
+    trainTask?: {
+        options?: {
+            durationMinutes: number;
+            departureAt: string;
+            arrivalAt: string;
+            classCode: string;
+            availableSeats: number;
+            farePerPassenger: number;
+            inventoryId: string;
+            trainName: string;
+            trainNumber: string;
+            originName: string;
+            destinationName: string;
+        }[] | undefined;
+        date?: string | null | undefined;
+        bookingId?: string | null | undefined;
+        bookingReference?: string | null | undefined;
+        passengers?: {
+            name: string;
+            age: number;
+            category: "ADULT" | "CHILD" | "SENIOR";
+            gender?: "MALE" | "FEMALE" | "OTHER" | "UNSPECIFIED" | undefined;
+            berthPreference?: "LOWER" | "MIDDLE" | "UPPER" | "SIDE_LOWER" | "SIDE_UPPER" | "NO_PREFERENCE" | undefined;
+        }[] | undefined;
+        origin?: string | null | undefined;
+        destination?: string | null | undefined;
+        passengerCount?: number | null | undefined;
+        stage?: "date" | "payment" | "route" | "passengers" | "passenger_count" | "option" | "review" | undefined;
+        selectedInventoryId?: string | null | undefined;
+    } | null | undefined;
+    lastTrainBooking?: {
+        date: string;
+        bookingId: string;
+        departureAt: string;
+        arrivalAt: string;
+        classCode: string;
+        farePerPassenger: number;
+        origin: string;
+        destination: string;
+        inventoryId: string;
+        reference: string;
+        passengerCount: number;
+        trainName: string;
+        trainNumber: string;
+    } | null | undefined;
 }>;
 export type ConversationState = z.infer<typeof conversationStateSchema>;
 export type ConversationMessage = {
@@ -134,6 +391,51 @@ export declare function loadTelegramConversation(chatId: string, userId: string,
             label: string;
         }[];
         lastTool: string | null;
+        trainTask: {
+            options: {
+                durationMinutes: number;
+                departureAt: string;
+                arrivalAt: string;
+                classCode: string;
+                availableSeats: number;
+                farePerPassenger: number;
+                inventoryId: string;
+                trainName: string;
+                trainNumber: string;
+                originName: string;
+                destinationName: string;
+            }[];
+            date: string | null;
+            bookingId: string | null;
+            bookingReference: string | null;
+            passengers: {
+                name: string;
+                age: number;
+                category: "ADULT" | "CHILD" | "SENIOR";
+                gender: "MALE" | "FEMALE" | "OTHER" | "UNSPECIFIED";
+                berthPreference: "LOWER" | "MIDDLE" | "UPPER" | "SIDE_LOWER" | "SIDE_UPPER" | "NO_PREFERENCE";
+            }[];
+            origin: string | null;
+            destination: string | null;
+            passengerCount: number | null;
+            stage: "date" | "payment" | "route" | "passengers" | "passenger_count" | "option" | "review";
+            selectedInventoryId: string | null;
+        } | null;
+        lastTrainBooking: {
+            date: string;
+            bookingId: string;
+            departureAt: string;
+            arrivalAt: string;
+            classCode: string;
+            farePerPassenger: number;
+            origin: string;
+            destination: string;
+            inventoryId: string;
+            reference: string;
+            passengerCount: number;
+            trainName: string;
+            trainNumber: string;
+        } | null;
     };
     version?: undefined;
 } | {
@@ -166,6 +468,51 @@ export declare function loadTelegramConversation(chatId: string, userId: string,
             label: string;
         }[];
         lastTool: string | null;
+        trainTask: {
+            options: {
+                durationMinutes: number;
+                departureAt: string;
+                arrivalAt: string;
+                classCode: string;
+                availableSeats: number;
+                farePerPassenger: number;
+                inventoryId: string;
+                trainName: string;
+                trainNumber: string;
+                originName: string;
+                destinationName: string;
+            }[];
+            date: string | null;
+            bookingId: string | null;
+            bookingReference: string | null;
+            passengers: {
+                name: string;
+                age: number;
+                category: "ADULT" | "CHILD" | "SENIOR";
+                gender: "MALE" | "FEMALE" | "OTHER" | "UNSPECIFIED";
+                berthPreference: "LOWER" | "MIDDLE" | "UPPER" | "SIDE_LOWER" | "SIDE_UPPER" | "NO_PREFERENCE";
+            }[];
+            origin: string | null;
+            destination: string | null;
+            passengerCount: number | null;
+            stage: "date" | "payment" | "route" | "passengers" | "passenger_count" | "option" | "review";
+            selectedInventoryId: string | null;
+        } | null;
+        lastTrainBooking: {
+            date: string;
+            bookingId: string;
+            departureAt: string;
+            arrivalAt: string;
+            classCode: string;
+            farePerPassenger: number;
+            origin: string;
+            destination: string;
+            inventoryId: string;
+            reference: string;
+            passengerCount: number;
+            trainName: string;
+            trainNumber: string;
+        } | null;
     };
     version: number;
 }>;

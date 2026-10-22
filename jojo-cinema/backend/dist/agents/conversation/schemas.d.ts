@@ -1,8 +1,8 @@
 import { z } from 'zod';
-export declare const intentSchema: z.ZodEnum<["movie_discovery", "showtime_search", "seat_selection", "booking", "booking_support", "general_cinema_help", "out_of_domain", "unclear"]>;
+export declare const intentSchema: z.ZodEnum<["movie_discovery", "showtime_search", "seat_selection", "booking", "booking_support", "train_search", "general_cinema_help", "out_of_domain", "unclear"]>;
 export type ConversationIntent = z.infer<typeof intentSchema>;
 export declare const conversationInterpretationSchema: z.ZodObject<{
-    intent: z.ZodEnum<["movie_discovery", "showtime_search", "seat_selection", "booking", "booking_support", "general_cinema_help", "out_of_domain", "unclear"]>;
+    intent: z.ZodEnum<["movie_discovery", "showtime_search", "seat_selection", "booking", "booking_support", "train_search", "general_cinema_help", "out_of_domain", "unclear"]>;
     constraints: z.ZodObject<{
         city: z.ZodNullable<z.ZodString>;
         date: z.ZodNullable<z.ZodString>;
@@ -30,7 +30,7 @@ export declare const conversationInterpretationSchema: z.ZodObject<{
     }>;
     needsClarification: z.ZodBoolean;
     clarificationQuestion: z.ZodNullable<z.ZodString>;
-    selectedTool: z.ZodNullable<z.ZodEnum<["movie_search", "showtime_search"]>>;
+    selectedTool: z.ZodNullable<z.ZodEnum<["movie_search", "showtime_search", "train_search"]>>;
     toolArguments: z.ZodNullable<z.ZodObject<{
         query: z.ZodOptional<z.ZodNullable<z.ZodString>>;
         city: z.ZodOptional<z.ZodNullable<z.ZodString>>;
@@ -38,6 +38,9 @@ export declare const conversationInterpretationSchema: z.ZodObject<{
         date: z.ZodOptional<z.ZodNullable<z.ZodString>>;
         language: z.ZodOptional<z.ZodNullable<z.ZodString>>;
         genre: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+        fromStation: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+        toStation: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+        passengers: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
     }, "strict", z.ZodTypeAny, {
         date?: string | null | undefined;
         query?: string | null | undefined;
@@ -45,6 +48,9 @@ export declare const conversationInterpretationSchema: z.ZodObject<{
         language?: string | null | undefined;
         genre?: string | null | undefined;
         movieTitle?: string | null | undefined;
+        fromStation?: string | null | undefined;
+        toStation?: string | null | undefined;
+        passengers?: number | null | undefined;
     }, {
         date?: string | null | undefined;
         query?: string | null | undefined;
@@ -52,12 +58,15 @@ export declare const conversationInterpretationSchema: z.ZodObject<{
         language?: string | null | undefined;
         genre?: string | null | undefined;
         movieTitle?: string | null | undefined;
+        fromStation?: string | null | undefined;
+        toStation?: string | null | undefined;
+        passengers?: number | null | undefined;
     }>>;
     responseDraft: z.ZodString;
     rationale: z.ZodString;
 }, "strip", z.ZodTypeAny, {
     rationale: string;
-    intent: "booking" | "showtime_search" | "movie_discovery" | "seat_selection" | "booking_support" | "general_cinema_help" | "out_of_domain" | "unclear";
+    intent: "booking" | "showtime_search" | "train_search" | "movie_discovery" | "seat_selection" | "booking_support" | "general_cinema_help" | "out_of_domain" | "unclear";
     constraints: {
         date: string | null;
         city: string | null;
@@ -69,7 +78,7 @@ export declare const conversationInterpretationSchema: z.ZodObject<{
     };
     needsClarification: boolean;
     clarificationQuestion: string | null;
-    selectedTool: "movie_search" | "showtime_search" | null;
+    selectedTool: "movie_search" | "showtime_search" | "train_search" | null;
     toolArguments: {
         date?: string | null | undefined;
         query?: string | null | undefined;
@@ -77,11 +86,14 @@ export declare const conversationInterpretationSchema: z.ZodObject<{
         language?: string | null | undefined;
         genre?: string | null | undefined;
         movieTitle?: string | null | undefined;
+        fromStation?: string | null | undefined;
+        toStation?: string | null | undefined;
+        passengers?: number | null | undefined;
     } | null;
     responseDraft: string;
 }, {
     rationale: string;
-    intent: "booking" | "showtime_search" | "movie_discovery" | "seat_selection" | "booking_support" | "general_cinema_help" | "out_of_domain" | "unclear";
+    intent: "booking" | "showtime_search" | "train_search" | "movie_discovery" | "seat_selection" | "booking_support" | "general_cinema_help" | "out_of_domain" | "unclear";
     constraints: {
         date: string | null;
         city: string | null;
@@ -93,7 +105,7 @@ export declare const conversationInterpretationSchema: z.ZodObject<{
     };
     needsClarification: boolean;
     clarificationQuestion: string | null;
-    selectedTool: "movie_search" | "showtime_search" | null;
+    selectedTool: "movie_search" | "showtime_search" | "train_search" | null;
     toolArguments: {
         date?: string | null | undefined;
         query?: string | null | undefined;
@@ -101,6 +113,9 @@ export declare const conversationInterpretationSchema: z.ZodObject<{
         language?: string | null | undefined;
         genre?: string | null | undefined;
         movieTitle?: string | null | undefined;
+        fromStation?: string | null | undefined;
+        toStation?: string | null | undefined;
+        passengers?: number | null | undefined;
     } | null;
     responseDraft: string;
 }>;

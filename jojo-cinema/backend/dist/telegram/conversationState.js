@@ -22,6 +22,26 @@ exports.conversationStateSchema = zod_1.z.object({
     pendingQuestion: zod_1.z.object({ type: zod_1.z.string().max(60), prompt: zod_1.z.string().max(500) }).nullable().default(null),
     presentedOptions: zod_1.z.array(zod_1.z.object({ id: zod_1.z.string().max(160), label: zod_1.z.string().max(200), type: zod_1.z.enum(['movie', 'city', 'theatre', 'showtime', 'seat']) })).max(30).default([]),
     lastTool: zod_1.z.string().max(80).nullable().default(null),
+    trainTask: zod_1.z.object({
+        stage: zod_1.z.enum(['route', 'date', 'passenger_count', 'option', 'passengers', 'review', 'payment']).default('route'),
+        origin: zod_1.z.string().max(100).nullable().default(null), destination: zod_1.z.string().max(100).nullable().default(null),
+        date: zod_1.z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null), passengerCount: zod_1.z.number().int().min(1).max(100).nullable().default(null),
+        passengers: zod_1.z.array(zod_1.z.object({
+            name: zod_1.z.string().max(100), age: zod_1.z.number().int().min(1).max(120),
+            category: zod_1.z.enum(['ADULT', 'CHILD', 'SENIOR']),
+            gender: zod_1.z.enum(['MALE', 'FEMALE', 'OTHER', 'UNSPECIFIED']).default('UNSPECIFIED'),
+            berthPreference: zod_1.z.enum(['LOWER', 'MIDDLE', 'UPPER', 'SIDE_LOWER', 'SIDE_UPPER', 'NO_PREFERENCE']).default('NO_PREFERENCE'),
+        })).max(100).default([]),
+        options: zod_1.z.array(zod_1.z.object({ inventoryId: zod_1.z.string().uuid(), trainName: zod_1.z.string(), trainNumber: zod_1.z.string(), originName: zod_1.z.string(), destinationName: zod_1.z.string(), departureAt: zod_1.z.string(), arrivalAt: zod_1.z.string(), durationMinutes: zod_1.z.number(), classCode: zod_1.z.string(), availableSeats: zod_1.z.number(), farePerPassenger: zod_1.z.number() })).max(30).default([]),
+        selectedInventoryId: zod_1.z.string().uuid().nullable().default(null), bookingId: zod_1.z.string().uuid().nullable().default(null), bookingReference: zod_1.z.string().nullable().default(null),
+    }).nullable().default(null),
+    lastTrainBooking: zod_1.z.object({
+        bookingId: zod_1.z.string().uuid(), reference: zod_1.z.string(), inventoryId: zod_1.z.string().uuid(),
+        trainName: zod_1.z.string(), trainNumber: zod_1.z.string(), origin: zod_1.z.string(), destination: zod_1.z.string(),
+        date: zod_1.z.string().regex(/^\d{4}-\d{2}-\d{2}$/), classCode: zod_1.z.string(),
+        departureAt: zod_1.z.string(), arrivalAt: zod_1.z.string(), farePerPassenger: zod_1.z.number().nonnegative(),
+        passengerCount: zod_1.z.number().int().min(1).max(100),
+    }).nullable().default(null),
     updatedAt: zod_1.z.string().datetime().nullable().default(null),
 }).strict();
 const MAX_HISTORY = 20;

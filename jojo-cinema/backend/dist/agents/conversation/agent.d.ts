@@ -36,7 +36,7 @@ export declare class ConversationIntentAgent implements Agent {
 }
 export declare function validateInterpretation(value: unknown): {
     rationale: string;
-    intent: "booking" | "showtime_search" | "movie_discovery" | "seat_selection" | "booking_support" | "general_cinema_help" | "out_of_domain" | "unclear";
+    intent: "booking" | "showtime_search" | "train_search" | "movie_discovery" | "seat_selection" | "booking_support" | "general_cinema_help" | "out_of_domain" | "unclear";
     constraints: {
         date: string | null;
         city: string | null;
@@ -48,7 +48,7 @@ export declare function validateInterpretation(value: unknown): {
     };
     needsClarification: boolean;
     clarificationQuestion: string | null;
-    selectedTool: "movie_search" | "showtime_search" | null;
+    selectedTool: "movie_search" | "showtime_search" | "train_search" | null;
     toolArguments: {
         date?: string | null | undefined;
         query?: string | null | undefined;
@@ -56,6 +56,9 @@ export declare function validateInterpretation(value: unknown): {
         language?: string | null | undefined;
         genre?: string | null | undefined;
         movieTitle?: string | null | undefined;
+        fromStation?: string | null | undefined;
+        toStation?: string | null | undefined;
+        passengers?: number | null | undefined;
     } | null;
     responseDraft: string;
 };
