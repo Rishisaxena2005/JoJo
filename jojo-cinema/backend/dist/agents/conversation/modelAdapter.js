@@ -20,11 +20,30 @@ function normalizeOllamaValue(value) {
         if (!Array.isArray(constraints.genres))
             constraints.genres = [];
         normalized.constraints = constraints;
+        if (typeof normalized.toolArguments === 'string') {
+            try {
+                normalized.toolArguments = JSON.parse(normalized.toolArguments);
+            }
+            catch {
+                normalized.toolArguments = null;
+            }
+        }
+        if (normalized.toolArguments !== null && (typeof normalized.toolArguments !== 'object' || Array.isArray(normalized.toolArguments))) {
+            normalized.toolArguments = null;
+        }
         const selectedTool = typeof normalized.selectedTool === 'string'
             ? normalized.selectedTool.replace(/^['"\s]+|['"\s]+$/g, '')
             : normalized.selectedTool;
-        if (selectedTool !== 'movie_search' && selectedTool !== 'showtime_search')
+        if ((selectedTool !== 'movie_search' && selectedTool !== 'showtime_search') || !normalized.toolArguments) {
             normalized.selectedTool = null;
+            if (selectedTool === 'movie_search' || selectedTool === 'showtime_search') {
+                normalized.needsClarification = true;
+                normalized.clarificationQuestion = 'Which movie or city would you like me to check?';
+            }
+        }
+        else {
+            normalized.selectedTool = selectedTool;
+        }
         for (const [key, fallback] of Object.entries({ needsClarification: false, clarificationQuestion: null, toolArguments: null, responseDraft: '', rationale: '' })) {
             if (!(key in normalized))
                 normalized[key] = fallback;

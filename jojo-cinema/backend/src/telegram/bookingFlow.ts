@@ -92,6 +92,11 @@ function explicitCityReference(text: string, allowBareCity = false): string | un
   return allowBareCity && /^[A-Za-z][A-Za-z -]*$/.test(text.trim()) ? text.trim() : undefined;
 }
 
+function isGeneralQuestion(text: string): boolean {
+  return /\b(?:what|which|where|how|who|when|why|tell me|show me|list|help|hello|hi|hey)\b/i.test(text)
+    && !/\b(?:choose|select|number|seat|ticket|book|reserve|pay|cancel)\b/i.test(text);
+}
+
 function requestedDate(text: string): string {
   const exact = text.match(/\b(\d{4}-\d{2}-\d{2})\b/)?.[1];
   if (exact) return exact;
@@ -534,10 +539,21 @@ export async function handleBookingMessage(
     flow = undefined;
   }
 
+  // Let users ask about listings or get help without destroying the active
+  // booking. Their next short answer can still continue the saved stage.
+  if (flow && isGeneralQuestion(message)) return null;
+
   if (flow?.stage === 'need_city') {
     const cities = await listCities();
     const city = matchCity(cities, message);
-    if (!city) return unknownCityReply(explicitCityReference(message, true) ?? message, cities);
+    if (!city) {
+      const requested = explicitCityReference(message, true);
+      if (requested && /\bin\s+/i.test(message)) return unknownCityReply(requested, cities);
+      return {
+        text: `Sure — I can help with that. Which city would you like to book in?${cities.length ? ` I currently have JoJo Cinema listings in ${cities.map(item => item.name).join(', ')}.` : ''}`,
+        inlineKeyboard: cityKeyboard(cities),
+      };
+    }
     flow.city = city;
     return showMoviesForCity(flow);
   }

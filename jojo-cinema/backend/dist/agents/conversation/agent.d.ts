@@ -1,11 +1,37 @@
 import type { Agent, AgentContext } from '../../agent-runtime/agent';
 import type { AgentRunInput, AgentResult } from '../../agent-runtime/schemas';
 import { type StructuredModel } from './modelAdapter';
+type City = {
+    name: string;
+    state?: string;
+};
+type Theatre = {
+    name: string;
+    address: string;
+    city: City;
+};
+type Movie = {
+    id?: string;
+    title: string;
+    language?: string;
+    genres?: string[];
+    synopsis?: string;
+    director?: string | null;
+    durationMinutes?: number;
+    certification?: string;
+};
+type CinemaData = {
+    cities(): Promise<City[]>;
+    theatres(city?: string): Promise<Theatre[]>;
+    movies(city?: string, context?: AgentContext): Promise<Movie[]>;
+    shows(movieTitle: string, city?: string, date?: string, context?: AgentContext): Promise<Array<Record<string, any>>>;
+};
 export declare class ConversationIntentAgent implements Agent {
     private readonly model;
+    private readonly data;
     readonly id = "conversation-intent";
     readonly name = "Conversation and Intent Agent";
-    constructor(model?: StructuredModel);
+    constructor(model?: StructuredModel, data?: CinemaData);
     invoke(input: AgentRunInput, context: AgentContext): Promise<AgentResult>;
 }
 export declare function validateInterpretation(value: unknown): {
@@ -33,4 +59,5 @@ export declare function validateInterpretation(value: unknown): {
     } | null;
     responseDraft: string;
 };
+export {};
 //# sourceMappingURL=agent.d.ts.map

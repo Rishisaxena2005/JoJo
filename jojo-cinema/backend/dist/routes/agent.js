@@ -6,6 +6,8 @@ const agent_1 = require("../agents/conversation/agent");
 const env_1 = require("../config/env");
 const schemas_1 = require("../agent-runtime/schemas");
 const api_1 = require("../types/api");
+const presentation_1 = require("../telegram/presentation");
+const events_1 = require("../agent-runtime/events");
 const router = (0, express_1.Router)();
 let runtime;
 function getRuntime() {
@@ -17,6 +19,29 @@ function getRuntime() {
     });
     return runtime;
 }
+function dashboardEvent(event) {
+    const { conversationId: _conversationId, ...safeEvent } = event;
+    return safeEvent;
+}
+// GET /api/agent/events — operational trace for the local/demo agent dashboard.
+router.get('/events', (req, res) => {
+    res.status(200).set({
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+    });
+    res.flushHeaders();
+    const unsubscribe = (0, events_1.subscribeToAgentEvents)(event => {
+        res.write(`event: agent_event\ndata: ${JSON.stringify(dashboardEvent(event))}\n\n`);
+    });
+    res.write(`event: snapshot\ndata: ${JSON.stringify((0, events_1.getRecentAgentEvents)(120).map(dashboardEvent))}\n\n`);
+    const heartbeat = setInterval(() => res.write(': keep-alive\n\n'), 20_000);
+    req.on('close', () => {
+        clearInterval(heartbeat);
+        unsubscribe();
+    });
+});
 // POST /api/agent/chat — intended for the Telegram adapter or demo chat client.
 router.post('/chat', async (req, res, next) => {
     try {
@@ -28,6 +53,7 @@ router.post('/chat', async (req, res, next) => {
             runId: run.runId,
             status: run.result.status,
             reply: run.result.response,
+            presentation: (0, presentation_1.createTelegramPresentation)(String(run.result.decision?.intent ?? ''), typeof run.result.decision?.selectedTool === 'string' ? run.result.decision.selectedTool : null, run.result.groundingEvidence ?? []),
         }));
     }
     catch (error) {

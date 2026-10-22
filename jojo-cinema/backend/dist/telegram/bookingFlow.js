@@ -45,6 +45,10 @@ function explicitCityReference(text, allowBareCity = false) {
         return phrase;
     return allowBareCity && /^[A-Za-z][A-Za-z -]*$/.test(text.trim()) ? text.trim() : undefined;
 }
+function isGeneralQuestion(text) {
+    return /\b(?:what|which|where|how|who|when|why|tell me|show me|list|help|hello|hi|hey)\b/i.test(text)
+        && !/\b(?:choose|select|number|seat|ticket|book|reserve|pay|cancel)\b/i.test(text);
+}
 function requestedDate(text) {
     const exact = text.match(/\b(\d{4}-\d{2}-\d{2})\b/)?.[1];
     if (exact)
@@ -58,7 +62,12 @@ function formatShow(show, index) {
         timeZone: show.screen.theatre.timezone || 'Asia/Kolkata',
         weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
     }).format(new Date(show.startTime));
-    return `${index + 1}. ${time} — ${show.screen.theatre.name}, ${show.screen.theatre.city.name}`;
+    const range = show.priceRange;
+    const price = range
+        ? range.min === range.max ? `₹${range.min}` : `₹${range.min}–₹${range.max}`
+        : 'price unavailable';
+    const available = show.availability?.available;
+    return `${index + 1}. ${time} — ${show.screen.theatre.name}, ${show.screen.theatre.city.name}; ${price} per seat${typeof available === 'number' ? `; ${available} seats available` : ''}`;
 }
 function parseRequestedTime(text) {
     const match = text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)\b/i);
@@ -90,22 +99,96 @@ function extractSeatLabels(message) {
     return [...new Set((message.toUpperCase().match(/\b[A-Z]{1,3}\s*\d{1,3}\b/g) ?? [])
             .map(label => label.replace(/\s+/g, '')))];
 }
-async function findShows(flow) {
+async function findShows(flow, includeAnyFutureDate = false) {
     if (!flow.movie || !flow.city)
         return [];
-    const query = new URLSearchParams({ movieId: flow.movie.id, city: flow.city, date: flow.date });
+    const query = new URLSearchParams({ movieId: flow.movie.id, city: flow.city });
+    if (!includeAnyFutureDate)
+        query.set('date', flow.date);
     return api(`/shows?${query.toString()}`);
 }
-async function listMoviesAndCities(text) {
-    const [movieResult, cities] = await Promise.all([
-        api('/movies?status=NOW_SHOWING&limit=100'),
-        api('/movies/cities'),
-    ]);
-    return { movie: matchMovie(movieResult.items, text), city: matchCity(cities, text), cities };
+async function listCities() {
+    return api('/movies/cities');
+}
+async function listMovies(city) {
+    const query = new URLSearchParams({ status: 'NOW_SHOWING', limit: '100', city });
+    const result = await api(`/movies?${query.toString()}`);
+    return result.items;
+}
+function cityKeyboard(cities) {
+    return cities.slice(0, 20).reduce((rows, city, index) => {
+        if (index % 2 === 0)
+            rows.push([]);
+        rows[rows.length - 1].push({ text: city.name, callback_data: `bookcity|${encodeURIComponent(city.name)}` });
+        return rows;
+    }, []);
 }
 function unknownCityReply(city, cities) {
     const available = cities.map(item => item.name).join(', ');
     return `I couldn’t find a JoJo Cinema location in ${city}.${available ? ` Current cities in the listings: ${available}.` : ''}`;
+}
+async function showMoviesForCity(flow) {
+    const movies = await listMovies(flow.city);
+    flow.movies = movies;
+    flow.stage = movies.length ? 'choose_movie' : 'need_city';
+    flows.set(flow.chatId, flow);
+    if (!movies.length)
+        return { text: `I couldn’t find movies with upcoming shows in ${flow.city}. Choose another city.`, inlineKeyboard: cityKeyboard(await listCities()) };
+    return {
+        text: `Movies available in ${flow.city}:\n${movies.slice(0, 12).map((movie, index) => `${index + 1}. ${movie.title}`).join('\n')}\n\nChoose a movie to see its cinemas.`,
+        inlineKeyboard: movies.slice(0, 12).map(movie => [{ text: movie.title, callback_data: `movie|${movie.id}` }]),
+    };
+}
+function movieChoice(flow, text) {
+    const index = text.match(/^\s*(\d{1,2})\s*[.!]?\s*$/)?.[1];
+    if (index)
+        return flow.movies?.[Number(index) - 1];
+    return matchMovie(flow.movies ?? [], text);
+}
+async function showTheatresForMovie(flow) {
+    let shows = await findShows(flow);
+    if (!shows.length)
+        shows = await findShows(flow, true);
+    flow.shows = shows;
+    const theatres = [...new Map(shows.map(show => [show.screen.theatre.id, {
+                id: show.screen.theatre.id, name: show.screen.theatre.name, address: show.screen.theatre.address,
+            }])).values()];
+    flow.theatres = theatres;
+    flow.stage = 'choose_theatre';
+    flows.set(flow.chatId, flow);
+    if (!theatres.length) {
+        flow.movie = undefined;
+        return { ...(await showMoviesForCity(flow)), text: `I couldn’t find upcoming shows for that movie in ${flow.city}. Choose another movie:\n${(flow.movies ?? []).slice(0, 12).map((movie, index) => `${index + 1}. ${movie.title}`).join('\n')}` };
+    }
+    return {
+        text: `Cinemas showing ${flow.movie.title} in ${flow.city}:\n${theatres.map((theatre, index) => {
+            const count = shows.filter(show => show.screen.theatre.id === theatre.id).length;
+            return `${index + 1}. ${theatre.name}${theatre.address ? ` — ${theatre.address}` : ''} (${count} show${count === 1 ? '' : 's'})`;
+        }).join('\n')}\n\nChoose a cinema to see its showtimes, prices, and seat availability.`,
+        inlineKeyboard: theatres.slice(0, 20).map(theatre => [{ text: theatre.name, callback_data: `theatre|${theatre.id}` }]),
+    };
+}
+function theatreChoice(flow, text) {
+    const theatres = flow.theatres ?? [];
+    const index = text.match(/^\s*(\d{1,2})\s*[.!]?\s*$/)?.[1];
+    if (index)
+        return theatres[Number(index) - 1];
+    const value = normalized(text);
+    return theatres.filter(theatre => value.includes(normalized(theatre.name)))
+        .sort((left, right) => right.name.length - left.name.length)[0];
+}
+function showtimesForTheatre(flow, theatre) {
+    flow.theatre = theatre;
+    flow.shows = (flow.shows ?? []).filter(show => show.screen.theatre.id === theatre.id);
+    flow.stage = 'choose_show';
+    flows.set(flow.chatId, flow);
+    return {
+        text: `Showtimes at ${theatre.name} for ${flow.movie.title}:\n${flow.shows.map(formatShow).join('\n')}\n\nChoose a showtime to view the seat map and category prices.`,
+        inlineKeyboard: flow.shows.slice(0, 20).map((show, index) => [{
+                text: `${index + 1}. ${new Intl.DateTimeFormat('en-IN', { timeZone: show.screen.theatre.timezone || 'Asia/Kolkata', hour: 'numeric', minute: '2-digit' }).format(new Date(show.startTime))} · ₹${show.priceRange?.min ?? '—'}–₹${show.priceRange?.max ?? '—'} · ${show.availability?.available ?? '?'} seats`,
+                callback_data: `show|${show.id}`,
+            }]),
+    };
 }
 function makeSeatKeyboard(flow) {
     const selected = new Set(flow.selectedSeatLabels ?? []);
@@ -241,27 +324,88 @@ function seatSelectionReply(flow) {
         inlineKeyboard: makeSeatKeyboard(flow),
     };
 }
-async function selectShow(flow, message) {
-    const show = chooseShow(flow.shows ?? [], message);
+function partySizeReply(flow) {
+    return {
+        text: `🎟 <b>${flow.movie.title}</b>\n📍 ${flow.city}\n\nHow many seats would you like?`,
+        inlineKeyboard: [
+            [1, 2, 3].map(count => ({ text: `${count} ${count === 1 ? 'seat' : 'seats'}`, callback_data: `party|${count}` })),
+            [4, 5, 6].map(count => ({ text: `${count} seats`, callback_data: `party|${count}` })),
+            [{ text: 'Cancel', callback_data: 'seat|cancel' }],
+        ],
+    };
+}
+async function openSeatMap(flow) {
+    const show = flow.show;
     if (!show)
-        return `Please reply with a show number or exact time:\n${(flow.shows ?? []).map(formatShow).join('\n')}`;
+        return 'I lost the selected show. Please choose a showtime again.';
     const seatMap = await api(`/shows/${show.id}/seats`);
     const seats = seatMap.rows.flatMap(row => row.seats).filter(seat => seat.status === 'AVAILABLE');
-    flow.show = show;
     flow.seatRows = seatMap.rows;
     flow.seats = seats;
     flow.selectedSeatLabels = [];
     flow.stage = 'choose_seats';
     flows.set(flow.chatId, flow);
     if (!seats.length) {
-        flow.stage = 'choose_show';
-        return 'That show has no available seats. Please choose another show.';
+        flow.stage = 'choose_party';
+        return { ...partySizeReply(flow), text: 'That show has no available seats. Choose another showtime.' };
     }
     return {
         text: `Tap ${flow.partySize} available seat${flow.partySize === 1 ? '' : 's'} using the buttons below, then tap Confirm seats. Seat categories and prices are shown in the image.`,
         photoSvg: seatMapSvg(flow),
         inlineKeyboard: makeSeatKeyboard(flow),
     };
+}
+async function beginShowSelection(chatId, showId) {
+    const previous = flows.get(chatId);
+    if (previous?.lockId && previous.stage === 'confirm_payment') {
+        await api(`/seat-locks/${previous.lockId}/release`, {
+            method: 'POST', body: JSON.stringify({ sessionId: previous.sessionId }),
+        }).catch(() => undefined);
+    }
+    const selected = await api(`/shows/${encodeURIComponent(showId)}`);
+    const movie = { id: selected.movie.id, title: selected.movie.title };
+    const show = {
+        id: selected.id,
+        startTime: selected.startTime,
+        movie: { title: selected.movie.title },
+        screen: { name: selected.screen.name, theatre: {
+                id: selected.screen.theatre.id,
+                name: selected.screen.theatre.name,
+                address: selected.screen.theatre.address,
+                city: { name: selected.screen.theatre.city.name },
+                timezone: selected.screen.theatre.timezone ?? 'Asia/Kolkata',
+            } },
+        availability: {
+            available: (selected.showSeats ?? []).filter((seat) => seat.status === 'AVAILABLE').length,
+            total: (selected.showSeats ?? []).length,
+        },
+        priceRange: (() => {
+            const prices = (selected.showSeats ?? []).map((seat) => Number(seat.price));
+            return prices.length ? { min: Math.min(...prices), max: Math.max(...prices) } : undefined;
+        })(),
+    };
+    const date = new Intl.DateTimeFormat('en-CA', {
+        timeZone: show.screen.theatre.timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date(show.startTime));
+    const flow = {
+        chatId, sessionId: `telegram-${chatId}`, stage: 'choose_party', partySize: previous?.partySize ?? 0,
+        movie, city: show.screen.theatre.city.name, date, show, shows: [show],
+    };
+    flows.set(chatId, flow);
+    if (flow.partySize > 0)
+        return openSeatMap(flow);
+    return partySizeReply(flow);
+}
+async function selectShow(flow, message) {
+    const show = chooseShow(flow.shows ?? [], message);
+    if (!show)
+        return `Please reply with a show number or exact time:\n${(flow.shows ?? []).map(formatShow).join('\n')}`;
+    flow.show = show;
+    if (flow.partySize > 0)
+        return openSeatMap(flow);
+    flow.stage = 'choose_party';
+    flows.set(flow.chatId, flow);
+    return partySizeReply(flow);
 }
 async function confirmSeats(flow, message) {
     const labels = extractSeatLabels(message);
@@ -328,8 +472,48 @@ async function handleBookingMessage(chatId, text, history) {
         flows.delete(chatId);
         flow = undefined;
     }
+    // Let users ask about listings or get help without destroying the active
+    // booking. Their next short answer can still continue the saved stage.
+    if (flow && isGeneralQuestion(message))
+        return null;
+    if (flow?.stage === 'need_city') {
+        const cities = await listCities();
+        const city = matchCity(cities, message);
+        if (!city) {
+            const requested = explicitCityReference(message, true);
+            if (requested && /\bin\s+/i.test(message))
+                return unknownCityReply(requested, cities);
+            return {
+                text: `Sure — I can help with that. Which city would you like to book in?${cities.length ? ` I currently have JoJo Cinema listings in ${cities.map(item => item.name).join(', ')}.` : ''}`,
+                inlineKeyboard: cityKeyboard(cities),
+            };
+        }
+        flow.city = city;
+        return showMoviesForCity(flow);
+    }
+    if (flow?.stage === 'choose_movie') {
+        const movie = movieChoice(flow, message);
+        if (!movie)
+            return showMoviesForCity(flow);
+        flow.movie = movie;
+        return showTheatresForMovie(flow);
+    }
+    if (flow?.stage === 'choose_theatre') {
+        const theatre = theatreChoice(flow, message);
+        if (!theatre) {
+            return `Choose a cinema by number or name:\n${(flow.theatres ?? []).map((item, index) => `${index + 1}. ${item.name}`).join('\n')}`;
+        }
+        return showtimesForTheatre(flow, theatre);
+    }
     if (flow?.stage === 'choose_show')
         return selectShow(flow, message);
+    if (flow?.stage === 'choose_party') {
+        const partySize = Number(message.match(/\b([1-6])\b/)?.[1]);
+        if (!partySize)
+            return partySizeReply(flow);
+        flow.partySize = partySize;
+        return openSeatMap(flow);
+    }
     if (flow?.stage === 'choose_seats')
         return confirmSeats(flow, message);
     if (flow?.stage === 'confirm_payment') {
@@ -337,88 +521,80 @@ async function handleBookingMessage(chatId, text, history) {
             return finishDemoPayment(flow);
         return 'Your seats are still held. Reply PAY DEMO to complete the simulated payment, or CANCEL to release them.';
     }
-    if (flow?.stage === 'need_movie' || flow?.stage === 'need_city') {
-        const current = await listMoviesAndCities(message);
-        const previous = await listMoviesAndCities(history.map(item => item.content).join(' '));
-        const cityReference = explicitCityReference(message, flow.stage === 'need_city');
-        flow.movie ??= current.movie ?? previous.movie;
-        flow.city ??= current.city ?? (!cityReference ? previous.city : undefined);
-        if (!flow.movie) {
-            flow.stage = 'need_movie';
-            flows.set(chatId, flow);
-            return 'Which movie would you like to book?';
-        }
-        if (!flow.city) {
-            if (cityReference) {
-                flows.set(chatId, flow);
-                return unknownCityReply(cityReference, current.cities);
-            }
-            flow.stage = 'need_city';
-            flows.set(chatId, flow);
-            return `Which city should I search for ${flow.movie.title}?`;
-        }
-        flow.date = requestedDate(`${history.map(item => item.content).join(' ')} ${message}`);
-        flow.shows = await findShows(flow);
-        if (!flow.shows.length) {
-            flows.delete(chatId);
-            return `I couldn’t find showtimes for ${flow.movie.title} in ${flow.city} on ${flow.date}.`;
-        }
-        flow.stage = 'choose_show';
-        flows.set(chatId, flow);
-        return `Available shows for ${flow.movie.title} in ${flow.city}:\n${flow.shows.map(formatShow).join('\n')}\nReply with a show number or exact time.`;
-    }
     if (!/\b(book|booking|reserve)\b/i.test(message))
         return null;
-    const count = Number(message.match(/\b([1-6])\s*(?:seats?|tickets?)\b/i)?.[1] ?? 1);
-    const current = await listMoviesAndCities(message);
-    const previous = await listMoviesAndCities(history.map(item => item.content).join(' '));
+    const count = Number(message.match(/\b([1-6])\s*(?:seats?|tickets?)\b/i)?.[1] ?? 0);
+    const cities = await listCities();
+    const city = matchCity(cities, message);
     const cityReference = explicitCityReference(message);
-    const found = {
-        movie: current.movie ?? previous.movie,
-        city: current.city ?? (!cityReference ? previous.city : undefined),
-        cities: current.cities,
-    };
-    if (cityReference && !found.city)
-        return unknownCityReply(cityReference, found.cities);
+    if (cityReference && !city)
+        return unknownCityReply(cityReference, cities);
     flow = {
-        stage: 'need_movie',
+        stage: city ? 'choose_movie' : 'need_city',
         chatId,
         sessionId: `telegram-${chatId}`,
         partySize: count,
-        movie: found.movie,
-        city: found.city,
+        city,
         date: requestedDate(`${history.map(item => item.content).join(' ')} ${message}`),
     };
-    if (!flow.movie) {
-        flows.set(chatId, flow);
-        return 'Which movie would you like to book?';
-    }
-    if (!flow.city) {
-        flow.stage = 'need_city';
-        flows.set(chatId, flow);
-        return `Which city should I search for ${flow.movie.title}?`;
-    }
-    flow.shows = await findShows(flow);
-    if (!flow.shows.length) {
-        flows.delete(chatId);
-        return `I couldn’t find showtimes for ${flow.movie.title} in ${flow.city} on ${flow.date}.`;
-    }
-    flow.stage = 'choose_show';
     flows.set(chatId, flow);
-    const selected = chooseShow(flow.shows, message);
-    if (selected)
-        return selectShow(flow, String(flow.shows.indexOf(selected) + 1));
-    return `Available shows for ${flow.movie.title} in ${flow.city}:\n${flow.shows.map(formatShow).join('\n')}\nReply with a show number or exact time.`;
+    if (city)
+        return showMoviesForCity(flow);
+    return {
+        text: `First, choose the city where you want to book. Available cities: ${cities.map(item => item.name).join(', ')}.`,
+        inlineKeyboard: cityKeyboard(cities),
+    };
 }
 async function handleBookingCallback(chatId, data) {
+    if (data.startsWith('bookcity|')) {
+        const flow = flows.get(chatId);
+        if (!flow || flow.stage !== 'need_city')
+            return null;
+        const cities = await listCities();
+        const city = matchCity(cities, decodeURIComponent(data.slice('bookcity|'.length)));
+        if (!city)
+            return { text: 'Please choose one of the listed cities.', inlineKeyboard: cityKeyboard(cities) };
+        flow.city = city;
+        return showMoviesForCity(flow);
+    }
+    if (data.startsWith('movie|')) {
+        const flow = flows.get(chatId);
+        if (!flow || flow.stage !== 'choose_movie')
+            return null;
+        const movie = flow.movies?.find(item => item.id === data.slice('movie|'.length));
+        if (!movie)
+            return showMoviesForCity(flow);
+        flow.movie = movie;
+        return showTheatresForMovie(flow);
+    }
+    if (data.startsWith('theatre|')) {
+        const flow = flows.get(chatId);
+        if (!flow || flow.stage !== 'choose_theatre')
+            return null;
+        const theatre = flow.theatres?.find(item => item.id === data.slice('theatre|'.length));
+        if (!theatre)
+            return { text: 'Please choose one of the listed cinemas.' };
+        return showtimesForTheatre(flow, theatre);
+    }
+    if (data.startsWith('show|'))
+        return beginShowSelection(chatId, data.slice('show|'.length));
     const flow = flows.get(chatId);
-    if (!flow || flow.stage !== 'choose_seats')
+    if (!flow)
         return null;
     const [, action] = data.split('|', 2);
     if (action === 'cancel') {
         flows.delete(chatId);
         return 'Seat selection cancelled.';
     }
+    if (flow.stage === 'choose_party') {
+        const partySize = Number(action);
+        if (!data.startsWith('party|') || !Number.isInteger(partySize) || partySize < 1 || partySize > 6)
+            return partySizeReply(flow);
+        flow.partySize = partySize;
+        return openSeatMap(flow);
+    }
+    if (flow.stage !== 'choose_seats')
+        return null;
     if (action === 'wait')
         return seatSelectionReply(flow);
     if (action === 'confirm') {

@@ -10,10 +10,58 @@ const cinema_1 = require("../../agent-tools/cinema");
 const database_1 = __importDefault(require("../../config/database"));
 const schemas_1 = require("./schemas");
 const modelAdapter_1 = require("./modelAdapter");
+const productionData = {
+    async cities() {
+        return database_1.default.city.findMany({ select: { name: true, state: true }, orderBy: { name: 'asc' } });
+    },
+    async theatres(city) {
+        return database_1.default.theatre.findMany({
+            where: city ? { city: { name: { equals: city, mode: 'insensitive' } } } : undefined,
+            select: { name: true, address: true, city: { select: { name: true, state: true } } },
+            orderBy: [{ city: { name: 'asc' } }, { name: 'asc' }],
+        });
+    },
+    async movies(city, context) {
+        return (0, tool_1.invokeTool)(cinema_1.movieSearchTool, { ...(city ? { city } : {}) }, {
+            runId: context?.runId ?? 'conversation-data', conversationId: context?.conversationId ?? 'conversation-data', agentId: 'conversation-intent', agentName: 'Conversation and Intent Agent', signal: context?.signal ?? new AbortController().signal,
+        });
+    },
+    async shows(movieTitle, city, date, context) {
+        return (0, tool_1.invokeTool)(cinema_1.showtimeSearchTool, { movieTitle, ...(city ? { city } : {}), ...(date ? { date } : {}) }, {
+            runId: context?.runId ?? 'conversation-data', conversationId: context?.conversationId ?? 'conversation-data', agentId: 'conversation-intent', agentName: 'Conversation and Intent Agent', signal: context?.signal ?? new AbortController().signal,
+        });
+    },
+};
+function normalized(value) {
+    return value.normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+function matchedByName(items, text) {
+    const haystack = ` ${normalized(text)} `;
+    return items.filter(item => haystack.includes(` ${normalized(item.name)} `))
+        .sort((left, right) => right.name.length - left.name.length)[0];
+}
+function matchedMovie(movies, text) {
+    const haystack = ` ${normalized(text)} `;
+    return movies.filter(movie => haystack.includes(` ${normalized(movie.title)} `))
+        .sort((left, right) => right.title.length - left.title.length)[0];
+}
+function requestedCity(text) {
+    return text.match(/\b(?:in|at|around|near)\s+([A-Za-z][A-Za-z .'-]*?)(?=\s+(?:on|for|today|tonight|tomorrow|after|before|showing|playing|movie|cinema|theatre|theater)\b|[?!,]|$)/i)?.[1]?.trim();
+}
+function requestedDate(text) {
+    return text.match(/\b(today|tonight|tomorrow|\d{4}-\d{2}-\d{2})\b/i)?.[1]?.toLocaleLowerCase();
+}
+function cityList(cities) {
+    return cities.map(city => city.name).join(', ');
+}
+function cityNotFoundReply(city, cities) {
+    const available = cityList(cities);
+    return `I couldn’t find a JoJo Cinema location in ${city}.${available ? ` Our current cities are: ${available}.` : ''}`;
+}
 function formatShowtimeRecords(records) {
     if (!records.length)
         return 'I couldn’t find matching showtimes in the current cinema listings. Please check the movie, city, or date and try again.';
-    return `I found these showtimes in the current cinema listings:\n${records.slice(0, 8).map(show => {
+    return `I found these showtimes in the current cinema listings:\n${records.slice(0, 16).map(show => {
         const city = show.screen?.theatre?.city?.name;
         const theatre = show.screen?.theatre?.name;
         const movie = show.movie?.title ?? 'Movie';
@@ -29,162 +77,167 @@ function formatShowtimeRecords(records) {
             : 'price not available';
         const available = show.availability?.available;
         return `• ${movie} — ${time}${theatre ? `, ${theatre}` : ''}${city ? `, ${city}` : ''}; ${prices}${typeof available === 'number' ? `; ${available} seats available` : ''}`;
+    }).join('\n')}${records.length > 16 ? `\n…and ${records.length - 16} more showtimes. Tell me a cinema or time to narrow the list.` : ''}`;
+}
+function normalizeGenrePreference(text) {
+    const value = normalized(text);
+    if (/\b(sci fi|science fiction|sci-fi)\b/.test(value))
+        return 'science fiction';
+    if (/\b(family friendly|family)\b/.test(value))
+        return 'family';
+    return ['action', 'adventure', 'comedy', 'crime', 'drama', 'fantasy', 'horror', 'mystery', 'musical', 'romance', 'thriller'].find(genre => new RegExp(`\\b${genre}\\b`).test(value));
+}
+function formatMovies(movies, prefix) {
+    if (!movies.length)
+        return 'I couldn’t find matching movies in the current JoJo Cinema listings. Try another city, language, or genre.';
+    return `${prefix}:\n${movies.slice(0, 12).map(movie => {
+        const description = [movie.language, movie.genres?.length ? movie.genres.join(', ') : undefined]
+            .filter(Boolean).join('; ');
+        const duration = movie.durationMinutes ? `; ${Math.floor(movie.durationMinutes / 60)}h ${movie.durationMinutes % 60}m` : '';
+        return `• ${movie.title}${description ? ` (${description}${duration})` : ''}`;
     }).join('\n')}`;
+}
+function result(input) {
+    return {
+        status: input.needsClarification ? 'waiting' : 'completed',
+        response: input.response,
+        rationale: input.rationale ?? 'Reply is based on JoJo Cinema listing data or a concise clarification.',
+        toolCalls: input.toolCalls ?? [],
+        usage: { inputTokens: 0, outputTokens: 0 },
+        decision: { intent: input.intent, constraints: input.constraints ?? {}, needsClarification: input.needsClarification ?? false, selectedTool: input.selectedTool ?? null },
+        groundingEvidence: input.evidence ?? [],
+    };
 }
 class ConversationIntentAgent {
     model;
+    data;
     id = 'conversation-intent';
     name = 'Conversation and Intent Agent';
-    constructor(model = new modelAdapter_1.OpenAIStructuredModel()) {
+    constructor(model = new modelAdapter_1.OpenAIStructuredModel(), data = productionData) {
         this.model = model;
+        this.data = data;
     }
     async invoke(input, context) {
-        const normalizedMessage = input.message.trim().toLocaleLowerCase();
+        const message = input.message.trim();
+        const normalizedMessage = normalized(message);
+        const lastAssistant = [...input.history].reverse().find(item => item.role === 'assistant')?.content ?? '';
+        const lastMeaningfulAssistant = [...input.history].reverse().find(item => item.role === 'assistant'
+            && !/could not look that up|couldn’t look that up|couldn't look that up|could not reach jojo cinema/i.test(item.content))?.content ?? '';
+        const previousUser = [...input.history].reverse().find(item => item.role === 'user')?.content ?? '';
+        const affirmative = /^(?:yes|yeah|yep|sure|okay|ok)(?:\s+please)?(?:\s+(?:in|at)\s+[a-z][a-z .'-]*)?[!. ]*$/i.test(message);
+        const acceptsBookingOffer = affirmative
+            && /(?:assistance with|help (?:you )?(?:with )?booking|help you book|booking a movie)/i.test(lastMeaningfulAssistant);
+        const isClarificationAnswer = message.length <= 100
+            && /\b(which city|which movie|what movie|showtimes or prices for|movie and city)\b/i.test(lastAssistant);
+        const effectiveMessage = isClarificationAnswer ? `${previousUser} ${message}` : message;
         const toolContext = {
-            runId: context.runId,
-            conversationId: context.conversationId,
-            agentId: this.id,
-            agentName: this.name,
-            signal: context.signal,
+            runId: context.runId, conversationId: context.conversationId, agentId: this.id,
+            agentName: this.name, signal: context.signal,
         };
-        const previousAssistantMessage = [...input.history].reverse().find(message => message.role === 'assistant')?.content ?? '';
-        if (/^(yes|yeah|yep|sure|okay|ok)$/i.test(normalizedMessage)
-            && /booking a movie at jojo cinema/i.test(previousAssistantMessage)) {
-            return {
-                status: 'waiting',
-                response: 'Sure. Which movie would you like to book, and in which city?',
-                rationale: 'The user confirmed booking help; movie and city are needed to continue.',
-                toolCalls: [],
-                usage: { inputTokens: 0, outputTokens: 0 },
-                decision: { intent: 'booking', constraints: {}, needsClarification: true, selectedTool: null },
-            };
+        if (/^(hi|hello|hey|good morning|good afternoon|good evening|namaste)[!. ]*$/i.test(message)) {
+            return result({ response: 'Hi! 👋 I’m JoJo Cinema’s booking assistant. I can show movies, cities, cinemas, showtimes, and ticket prices, or help you book seats. What would you like to know?', intent: 'general_cinema_help' });
         }
-        // Handle the most common open-ended recommendation request without asking the
-        // small local model to infer intent or generate unsupported movie facts.
-        if (/^(please\s+)?(suggest|recommend|pick)\s+(me\s+)?(any|a|one)\s+(good\s+)?(movie|film)[.!?]*$/i.test(input.message.trim())) {
-            const movies = await (0, tool_1.invokeTool)(cinema_1.movieSearchTool, {}, toolContext);
-            const selected = movies.slice(0, 5);
-            const response = selected.length
-                ? `Here are some movies currently listed at JoJo Cinema:\n${selected.map(movie => `• ${movie.title} (${movie.language}; ${movie.genres.join(', ')})`).join('\n')}\n\nTell me your city or a movie title if you’d like showtimes and prices.`
-                : 'I couldn’t find any movies currently listed. Please try again after the cinema listings are available.';
-            return {
-                status: 'completed',
-                response,
-                rationale: 'Movie titles and details are taken from the cinema database.',
-                toolCalls: [cinema_1.movieSearchTool.name],
-                usage: { inputTokens: 0, outputTokens: 0 },
-                decision: { intent: 'movie_discovery', constraints: {}, needsClarification: false, selectedTool: 'movie_search' },
-                groundingEvidence: selected,
-            };
+        const asksCities = /\b(which|what|list|available|covered|serve|have)\b.*\b(cities|city|locations)\b|\b(cities|locations)\s+(do you|are available|do jojo)\b/i.test(effectiveMessage);
+        const asksTheatres = /\b(cinema|cinemas|theatre|theatres|theater|theaters|halls|venues|addresses)\b/i.test(effectiveMessage)
+            && /\b(where|which|what|list|near|in|at|address|location|have)\b/i.test(effectiveMessage);
+        const asksShowtimes = /\b(showtimes?|show\s+times?|show\s+timings?|timings?|schedule|screenings?|playing|showing|ticket\s+prices?|prices?|how\s+much|cost)\b/i.test(effectiveMessage);
+        const asksMovies = /\b(movie|movies|film|films|watch|recommend|recommendation|suggest|showing|playing|listed|available|about|story|synopsis|details|directed)\b/i.test(effectiveMessage);
+        const cities = asksCities || asksTheatres || asksShowtimes || asksMovies || acceptsBookingOffer ? await this.data.cities() : [];
+        const bareCityAnswer = isClarificationAnswer && /\bwhich city\b/i.test(lastAssistant) && /^[A-Za-z][A-Za-z .'-]*$/.test(message);
+        const currentCity = matchedByName(cities, message)
+            ?? (isClarificationAnswer && !bareCityAnswer ? matchedByName(cities, effectiveMessage) : undefined);
+        if (acceptsBookingOffer) {
+            if (!currentCity) {
+                return result({
+                    response: `Sure — I can help you book. Which city should I search in? Current JoJo Cinema cities: ${cityList(cities)}.`,
+                    intent: 'booking', needsClarification: true, evidence: cities,
+                });
+            }
+            const availableMovies = await this.data.movies(currentCity.name, context);
+            return result({
+                response: `${formatMovies(availableMovies, `Movies currently listed in ${currentCity.name}`)}\n\nWhich movie would you like to book?`,
+                intent: 'booking', constraints: { city: currentCity.name }, needsClarification: true,
+                toolCalls: ['movie_search'], selectedTool: 'movie_search', evidence: availableMovies,
+            });
         }
-        if (/\b(showtimes?|show\s+times?|show\s+timings?|screenings?|ticket\s+prices?|how\s+much|cost)\b/i.test(input.message)) {
-            const movies = await (0, tool_1.invokeTool)(cinema_1.movieSearchTool, {}, toolContext);
-            const normalizedRequest = input.message.toLocaleLowerCase();
-            const movie = movies
-                .filter(candidate => normalizedRequest.includes(candidate.title.toLocaleLowerCase()))
-                .sort((left, right) => right.title.length - left.title.length)[0];
+        const cityPhrase = requestedCity(message) ?? (bareCityAnswer ? message : undefined);
+        if (cityPhrase && !currentCity && (asksTheatres || asksShowtimes || asksMovies)) {
+            return result({ response: cityNotFoundReply(cityPhrase, cities), intent: asksShowtimes ? 'showtime_search' : 'movie_discovery', constraints: { city: cityPhrase }, evidence: cities });
+        }
+        if (asksCities) {
+            return result({ response: cities.length ? `JoJo Cinema currently has listings in: ${cityList(cities)}. Which city should I check?` : 'I can’t retrieve the city list right now. Please try again shortly.', intent: 'general_cinema_help', evidence: cities });
+        }
+        if (asksTheatres) {
+            const theatres = await this.data.theatres(currentCity?.name);
+            if (!theatres.length)
+                return result({ response: currentCity ? `I couldn’t find any cinema listings in ${currentCity.name}.` : 'I couldn’t find any cinema locations in the current listings.', intent: 'general_cinema_help', constraints: { city: currentCity?.name ?? null }, evidence: theatres });
+            const heading = currentCity ? `Cinemas in ${currentCity.name}` : 'JoJo Cinema locations';
+            return result({ response: `${heading}:\n${theatres.map(theatre => `• ${theatre.name} — ${theatre.address}, ${theatre.city.name}`).join('\n')}`, intent: 'general_cinema_help', constraints: { city: currentCity?.name ?? null }, evidence: theatres });
+        }
+        const movies = asksShowtimes || asksMovies ? await this.data.movies(currentCity?.name, context) : [];
+        const movie = matchedMovie(movies, effectiveMessage);
+        const language = ['hindi', 'english', 'marathi', 'tamil', 'telugu', 'kannada', 'malayalam', 'bengali'].find(item => new RegExp(`\\b${item}\\b`, 'i').test(effectiveMessage));
+        const genre = normalizeGenrePreference(effectiveMessage);
+        if (asksShowtimes) {
             if (!movie) {
-                return {
-                    status: 'waiting',
-                    response: 'Which movie would you like showtimes or ticket prices for?',
-                    rationale: 'A movie title is needed to look up showtimes.',
-                    toolCalls: [cinema_1.movieSearchTool.name],
-                    usage: { inputTokens: 0, outputTokens: 0 },
-                    decision: { intent: 'showtime_search', constraints: {}, needsClarification: true, selectedTool: null },
-                    groundingEvidence: movies,
-                };
+                if (movies.length)
+                    return result({
+                        response: `Which movie would you like showtimes or prices for${currentCity ? ` in ${currentCity.name}` : ''}? Currently listed: ${movies.slice(0, 8).map(item => item.title).join(', ')}.`,
+                        intent: 'showtime_search', constraints: { city: currentCity?.name ?? null }, needsClarification: true,
+                        toolCalls: ['movie_search'], selectedTool: null, evidence: movies,
+                    });
+                return result({ response: 'Which movie and city should I check for showtimes and prices?', intent: 'showtime_search', needsClarification: true, evidence: movies });
             }
-            const cities = await database_1.default.city.findMany({ select: { name: true } });
-            const city = cities.find(candidate => normalizedRequest.includes(candidate.name.toLocaleLowerCase()))?.name;
-            const explicitCity = input.message.match(/\b(?:in|at)\s+([A-Za-z][A-Za-z -]*?)(?=\s+(?:on|for|today|tonight|tomorrow|at|around|after|before)\b|[?.!,]|$)/i)?.[1]?.trim();
-            if (explicitCity && !city) {
-                const locationList = cities.map(candidate => candidate.name).join(', ');
-                return {
-                    status: 'completed',
-                    response: `I don’t see ${explicitCity} among current JoJo Cinema locations.${locationList ? ` Available cities: ${locationList}.` : ''}`,
-                    rationale: 'The requested city does not match a location in the cinema database.',
-                    toolCalls: [cinema_1.movieSearchTool.name],
-                    usage: { inputTokens: 0, outputTokens: 0 },
-                    decision: { intent: 'showtime_search', constraints: { city: explicitCity }, needsClarification: false, selectedTool: null },
-                    groundingEvidence: cities,
-                };
+            const date = requestedDate(effectiveMessage) ?? 'today';
+            const shows = await this.data.shows(movie.title, currentCity?.name, date, context);
+            return result({ response: formatShowtimeRecords(shows), intent: 'showtime_search', constraints: { movieTitle: movie.title, city: currentCity?.name ?? null, date }, toolCalls: ['showtime_search'], selectedTool: 'showtime_search', evidence: shows });
+        }
+        if (asksMovies) {
+            let filtered = movies;
+            if (language)
+                filtered = filtered.filter(item => normalized(item.language ?? '') === normalized(language));
+            if (genre)
+                filtered = filtered.filter(item => (item.genres ?? []).some(itemGenre => {
+                    const itemNormalized = normalized(itemGenre);
+                    return genre === 'science fiction' ? /sci fi|science fiction/.test(itemNormalized)
+                        : genre === 'family' ? /family/.test(itemNormalized)
+                            : itemNormalized.includes(genre);
+                }));
+            if (movie && /\b(tell me about|about|details|story|synopsis|who directed)\b/i.test(effectiveMessage)) {
+                return result({ response: `${movie.title}${movie.language ? ` (${movie.language})` : ''}${movie.genres?.length ? ` — ${movie.genres.join(', ')}` : ''}${movie.durationMinutes ? `\nDuration: ${movie.durationMinutes} minutes` : ''}${movie.certification ? `\nCertification: ${movie.certification}` : ''}${movie.director ? `\nDirector: ${movie.director}` : ''}${movie.synopsis ? `\n\n${movie.synopsis}` : ''}`, intent: 'movie_discovery', evidence: [movie] });
             }
-            const dateMatch = input.message.match(/\b(today|tonight|tomorrow|\d{4}-\d{2}-\d{2})\b/i)?.[0];
-            const shows = await (0, tool_1.invokeTool)(cinema_1.showtimeSearchTool, {
-                movieTitle: movie.title,
-                ...(city ? { city } : {}),
-                ...(dateMatch ? { date: dateMatch.toLocaleLowerCase() } : {}),
-            }, toolContext);
-            return {
-                status: 'completed',
-                response: formatShowtimeRecords(shows),
-                rationale: 'Showtimes, prices, and availability are formatted from verified cinema database results.',
-                toolCalls: [cinema_1.movieSearchTool.name, cinema_1.showtimeSearchTool.name],
-                usage: { inputTokens: 0, outputTokens: 0 },
-                decision: { intent: 'showtime_search', constraints: { city: city ?? null, date: dateMatch ?? null }, needsClarification: false, selectedTool: 'showtime_search' },
-                groundingEvidence: shows,
-            };
+            const prefix = language || genre ? `Movies matching your preferences${currentCity ? ` in ${currentCity.name}` : ''}` : `Movies currently listed${currentCity ? ` in ${currentCity.name}` : ''}`;
+            return result({ response: formatMovies(filtered, prefix), intent: 'movie_discovery', constraints: { city: currentCity?.name ?? null, language: language ?? null, genres: genre ? [genre] : [] }, toolCalls: ['movie_search'], selectedTool: 'movie_search', evidence: filtered });
+        }
+        const previousAssistantMessage = [...input.history].reverse().find(item => item.role === 'assistant')?.content ?? '';
+        if (/^(yes|yeah|yep|sure|okay|ok)$/i.test(normalizedMessage) && /booking a movie at jojo cinema/i.test(previousAssistantMessage)) {
+            return result({ response: 'Sure. Which movie would you like to book, and in which city?', intent: 'booking', needsClarification: true });
         }
         const messages = (0, modelAdapter_1.makeConversationMessages)(input.history, input.message);
         const interpretationResult = await this.model.generate(schemas_1.conversationInterpretationSchema, messages, context.signal);
         const interpretation = schemas_1.conversationInterpretationSchema.parse(interpretationResult.value);
-        let inputTokens = interpretationResult.usage.inputTokens;
-        let outputTokens = interpretationResult.usage.outputTokens;
-        const calls = [];
+        const inputTokens = interpretationResult.usage.inputTokens;
+        const outputTokens = interpretationResult.usage.outputTokens;
         if (interpretation.needsClarification) {
-            return {
-                status: 'waiting',
-                response: interpretation.clarificationQuestion ?? 'What would you like help with?',
-                rationale: interpretation.rationale,
-                toolCalls: calls,
-                usage: { inputTokens, outputTokens },
-                decision: { intent: interpretation.intent, constraints: interpretation.constraints, needsClarification: true, selectedTool: null },
-            };
+            return { ...result({ response: interpretation.clarificationQuestion ?? 'What would you like help with?', intent: interpretation.intent, needsClarification: true }), rationale: interpretation.rationale, usage: { inputTokens, outputTokens } };
         }
         if (!interpretation.selectedTool || !['movie_discovery', 'showtime_search'].includes(interpretation.intent)) {
             return {
-                status: interpretation.intent === 'unclear' ? 'waiting' : 'completed',
-                response: interpretation.responseDraft,
-                rationale: interpretation.rationale,
-                toolCalls: calls,
-                usage: { inputTokens, outputTokens },
-                decision: { intent: interpretation.intent, constraints: interpretation.constraints, needsClarification: interpretation.intent === 'unclear', selectedTool: null },
+                ...result({ response: interpretation.responseDraft, intent: interpretation.intent, needsClarification: interpretation.intent === 'unclear' }),
+                rationale: interpretation.rationale, usage: { inputTokens, outputTokens },
             };
         }
-        let toolResult;
-        const toolArguments = Object.fromEntries(Object.entries(interpretation.toolArguments ?? {}).filter(([, value]) => value !== null && value !== undefined));
-        if (interpretation.selectedTool === 'movie_search') {
-            toolResult = await (0, tool_1.invokeTool)(cinema_1.movieSearchTool, toolArguments, toolContext);
-            calls.push(cinema_1.movieSearchTool.name);
-        }
-        else {
-            toolResult = await (0, tool_1.invokeTool)(cinema_1.showtimeSearchTool, toolArguments, toolContext);
-            calls.push(cinema_1.showtimeSearchTool.name);
-        }
-        // Present the validated database payload directly. A second LLM call made local
-        // Qwen exceed the request deadline and is unnecessary for these factual replies.
+        const toolArguments = Object.fromEntries(Object.entries(interpretation.toolArguments ?? {}).filter(([, value]) => value != null));
+        const toolResult = interpretation.selectedTool === 'movie_search'
+            ? await (0, tool_1.invokeTool)(cinema_1.movieSearchTool, toolArguments, toolContext)
+            : await (0, tool_1.invokeTool)(cinema_1.showtimeSearchTool, toolArguments, toolContext);
         const records = Array.isArray(toolResult) ? toolResult : [];
-        let response;
-        if (interpretation.selectedTool === 'movie_search') {
-            response = records.length
-                ? `Here are matching movies currently listed at JoJo Cinema:\n${records.slice(0, 5).map(movie => {
-                    const details = [movie.language, Array.isArray(movie.genres) && movie.genres.length ? movie.genres.join(', ') : null]
-                        .filter(Boolean).join('; ');
-                    return `• ${movie.title}${details ? ` (${details})` : ''}`;
-                }).join('\n')}`
-                : 'I couldn’t find matching movies in the current cinema listings. Try another title, city, language, or genre.';
-        }
-        else {
-            response = formatShowtimeRecords(records);
-        }
+        const response = interpretation.selectedTool === 'movie_search'
+            ? formatMovies(records, 'Here are matching movies currently listed at JoJo Cinema')
+            : formatShowtimeRecords(records);
         return {
-            status: 'completed',
-            response,
-            rationale: 'The reply is formatted directly from the verified cinema database results.',
-            toolCalls: calls,
-            usage: { inputTokens, outputTokens },
-            decision: { intent: interpretation.intent, constraints: interpretation.constraints, needsClarification: false, selectedTool: interpretation.selectedTool },
-            groundingEvidence: Array.isArray(toolResult) ? toolResult : [toolResult],
+            ...result({ response, intent: interpretation.intent, constraints: interpretation.constraints, selectedTool: interpretation.selectedTool, toolCalls: [interpretation.selectedTool], evidence: records }),
+            rationale: 'Facts are formatted directly from verified cinema database results.', usage: { inputTokens, outputTokens },
         };
     }
 }

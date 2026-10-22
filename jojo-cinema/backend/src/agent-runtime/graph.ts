@@ -42,7 +42,7 @@ export function createAgentRuntime(agent: Agent, options: AgentRuntimeOptions) {
         const estimatedCostUsd = (result.usage.inputTokens * options.inputCostPer1MUsd + result.usage.outputTokens * options.outputCostPer1MUsd) / 1_000_000;
         if (estimatedCostUsd > options.maxCostUsd) throw new Error('Configured per-run model cost limit exceeded');
         const durationMs = Date.now() - startedAt;
-        createAgentEvent({ runId: state.runId, conversationId: state.conversationId, agentId: agent.id, agentName: agent.name, eventType: 'agent.completed', status: result.status, summary: `Agent returned ${result.status}`, durationMs, tokenUsage: { input: result.usage.inputTokens, output: result.usage.outputTokens }, estimatedCostUsd });
+        createAgentEvent({ runId: state.runId, conversationId: state.conversationId, agentId: agent.id, agentName: agent.name, eventType: 'agent.completed', status: result.status, summary: `Agent returned ${result.status}`, replyPreview: result.response.slice(0, 500), durationMs, tokenUsage: { input: result.usage.inputTokens, output: result.usage.outputTokens }, estimatedCostUsd });
         return { result };
       } catch (error) {
         const category = controller.signal.aborted ? 'timeout' : 'unknown';
@@ -68,7 +68,7 @@ export function createAgentRuntime(agent: Agent, options: AgentRuntimeOptions) {
         const result = agentResultSchema.parse(graphResult.result);
         const durationMs = Date.now() - startedAt;
         const estimatedCostUsd = (result.usage.inputTokens * options.inputCostPer1MUsd + result.usage.outputTokens * options.outputCostPer1MUsd) / 1_000_000;
-        createAgentEvent({ runId, conversationId, agentId: 'orchestrator', agentName: 'Agent runtime', eventType: 'run.completed', status: result.status, summary: 'Agent run completed', durationMs, tokenUsage: { input: result.usage.inputTokens, output: result.usage.outputTokens }, estimatedCostUsd });
+        createAgentEvent({ runId, conversationId, agentId: 'orchestrator', agentName: 'Agent runtime', eventType: 'run.completed', status: result.status, summary: 'Agent run completed', replyPreview: result.response.slice(0, 500), durationMs, tokenUsage: { input: result.usage.inputTokens, output: result.usage.outputTokens }, estimatedCostUsd });
         return { runId, conversationId, result, durationMs, estimatedCostUsd };
       } catch (error) {
         const durationMs = Date.now() - startedAt;

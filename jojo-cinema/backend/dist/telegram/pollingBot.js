@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 require("dotenv/config");
 const sharp_1 = __importDefault(require("sharp"));
 const bookingFlow_1 = require("./bookingFlow");
+const presentation_1 = require("./presentation");
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token)
     throw new Error('Set TELEGRAM_BOT_TOKEN in backend/.env before starting the Telegram polling bot.');
@@ -61,19 +62,23 @@ async function handleMessage(update) {
             histories.set(chatId, history.slice(-MAX_HISTORY));
             if (typeof bookingReply !== 'string' && bookingReply.photoSvg) {
                 const png = await (0, sharp_1.default)(Buffer.from(bookingReply.photoSvg)).png().toBuffer();
+                const formatted = (0, presentation_1.formatTelegramReply)(replyText);
                 await telegramWithPhoto('sendPhoto', {
                     chat_id: chatId,
-                    caption: replyText.slice(0, 1024),
+                    caption: formatted.text.slice(0, 1024),
+                    parse_mode: 'HTML',
                     reply_markup: replyMarkup(bookingReply),
                 }, png);
             }
             else {
+                const formatted = typeof bookingReply === 'string'
+                    ? (0, presentation_1.formatTelegramReply)(bookingReply)
+                    : { text: bookingReply.text, inlineKeyboard: bookingReply.inlineKeyboard };
                 await telegram('sendMessage', {
                     chat_id: chatId,
-                    text: replyText.slice(0, 4000),
-                    ...(typeof bookingReply === 'string' || !bookingReply.inlineKeyboard ? {} : {
-                        reply_markup: { inline_keyboard: bookingReply.inlineKeyboard },
-                    }),
+                    text: formatted.text.slice(0, 4000),
+                    parse_mode: 'HTML',
+                    ...(formatted.inlineKeyboard ? { reply_markup: { inline_keyboard: formatted.inlineKeyboard } } : {}),
                 });
             }
             return;
@@ -84,12 +89,25 @@ async function handleMessage(update) {
             body: JSON.stringify({ message: text, conversationId: `telegram-${chatId}`, history }),
         });
         const envelope = await response.json();
+        if (!response.ok || !envelope.success || !envelope.data?.reply) {
+            console.error('Cinema agent API returned an unusable response:', {
+                status: response.status,
+                code: envelope.error?.code ?? 'EMPTY_REPLY',
+                message: envelope.error?.message ?? 'Agent response was missing a reply',
+            });
+        }
         const reply = response.ok && envelope.success && envelope.data?.reply
             ? envelope.data.reply
             : 'Sorry, I could not look that up just now. Please try again in a moment.';
         history.push({ role: 'user', content: text }, { role: 'assistant', content: reply });
         histories.set(chatId, history.slice(-MAX_HISTORY));
-        await telegram('sendMessage', { chat_id: chatId, text: reply.slice(0, 4000) });
+        const formatted = (0, presentation_1.formatTelegramReply)(reply, envelope.data?.presentation);
+        await telegram('sendMessage', {
+            chat_id: chatId,
+            text: formatted.text.slice(0, 4000),
+            parse_mode: 'HTML',
+            ...(formatted.inlineKeyboard ? { reply_markup: { inline_keyboard: formatted.inlineKeyboard } } : {}),
+        });
     }
     catch (error) {
         console.error('Could not handle Telegram message:', error instanceof Error ? error.message : 'unknown error');
@@ -107,32 +125,75 @@ async function handleCallback(update) {
     if (!callback.message)
         return;
     const chatId = String(callback.message.chat.id);
+    if (callback.data?.startsWith('city|')) {
+        const city = decodeURIComponent(callback.data.slice('city|'.length));
+        const history = histories.get(chatId) ?? [];
+        const response = await fetch(`${cinemaApi}/agent/chat`, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ message: `Which cinemas are in ${city}?`, conversationId: `telegram-${chatId}`, history }),
+        });
+        const envelope = await response.json();
+        const formatted = (0, presentation_1.formatTelegramReply)(envelope.data?.reply ?? 'I couldn’t load that city right now.', envelope.data?.presentation);
+        await telegram('editMessageText', {
+            chat_id: chatId, message_id: callback.message.message_id,
+            text: formatted.text.slice(0, 4000), parse_mode: 'HTML',
+            ...(formatted.inlineKeyboard ? { reply_markup: { inline_keyboard: formatted.inlineKeyboard } } : { reply_markup: { inline_keyboard: [] } }),
+        });
+        return;
+    }
     const reply = await (0, bookingFlow_1.handleBookingCallback)(chatId, callback.data ?? '');
     if (!reply)
         return;
     const text = bookingReplyText(reply).slice(0, 4000);
     if (typeof reply !== 'string' && reply.photoSvg) {
         const png = await (0, sharp_1.default)(Buffer.from(reply.photoSvg)).png().toBuffer();
-        await telegramWithPhoto('editMessageMedia', {
-            chat_id: chatId,
-            message_id: String(callback.message.message_id),
-            media: JSON.stringify({ type: 'photo', media: 'attach://photo', caption: text.slice(0, 1024) }),
-            reply_markup: replyMarkup(reply),
-        }, png);
+        const formatted = (0, presentation_1.formatTelegramReply)(text);
+        if (callback.message.caption) {
+            await telegramWithPhoto('editMessageMedia', {
+                chat_id: chatId,
+                message_id: String(callback.message.message_id),
+                media: JSON.stringify({ type: 'photo', media: 'attach://photo', caption: formatted.text.slice(0, 1024), parse_mode: 'HTML' }),
+                reply_markup: replyMarkup(reply),
+            }, png);
+        }
+        else {
+            await telegramWithPhoto('sendPhoto', {
+                chat_id: chatId,
+                caption: formatted.text.slice(0, 1024),
+                parse_mode: 'HTML',
+                reply_markup: replyMarkup(reply),
+            }, png);
+            await telegram('editMessageReplyMarkup', {
+                chat_id: chatId, message_id: callback.message.message_id,
+                reply_markup: { inline_keyboard: [] },
+            });
+        }
+    }
+    else if (typeof reply === 'string' && callback.message.caption) {
+        await telegram('editMessageCaption', {
+            chat_id: chatId, message_id: callback.message.message_id,
+            caption: text.slice(0, 1024), reply_markup: { inline_keyboard: [] },
+        });
     }
     else if (typeof reply === 'string') {
-        await telegram('editMessageCaption', {
-            chat_id: chatId,
-            message_id: callback.message.message_id,
-            caption: text.slice(0, 1024),
-            reply_markup: { inline_keyboard: [] },
+        const formatted = (0, presentation_1.formatTelegramReply)(reply);
+        await telegram('editMessageText', {
+            chat_id: chatId, message_id: callback.message.message_id,
+            text: formatted.text.slice(0, 4000), parse_mode: 'HTML', reply_markup: { inline_keyboard: [] },
+        });
+    }
+    else if (!callback.message.caption) {
+        await telegram('editMessageText', {
+            chat_id: chatId, message_id: callback.message.message_id,
+            text: text.slice(0, 4000), parse_mode: 'HTML',
+            reply_markup: { inline_keyboard: reply.inlineKeyboard ?? [] },
         });
     }
     else {
         await telegram('editMessageCaption', {
             chat_id: chatId,
             message_id: callback.message.message_id,
-            caption: text.slice(0, 1024),
+            caption: text.slice(0, 1024), parse_mode: 'HTML',
             reply_markup: { inline_keyboard: reply.inlineKeyboard ?? [] },
         });
     }
@@ -160,7 +221,17 @@ async function main() {
             }
         }
         catch (error) {
-            console.error('Telegram polling failed:', error instanceof Error ? error.message : 'unknown error');
+            const cause = error instanceof Error && 'cause' in error ? error.cause : undefined;
+            const causeDetails = cause && typeof cause === 'object'
+                ? {
+                    code: 'code' in cause ? cause.code : undefined,
+                    message: 'message' in cause ? cause.message : undefined,
+                }
+                : undefined;
+            console.error('Telegram polling failed:', {
+                message: error instanceof Error ? error.message : 'unknown error',
+                ...(causeDetails ? { cause: causeDetails } : {}),
+            });
             await new Promise(resolve => setTimeout(resolve, 3000));
         }
     }

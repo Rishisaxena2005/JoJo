@@ -12,8 +12,8 @@ type Movie = { id?: string; title: string; language?: string; genres?: string[];
 type CinemaData = {
   cities(): Promise<City[]>;
   theatres(city?: string): Promise<Theatre[]>;
-  movies(city?: string): Promise<Movie[]>;
-  shows(movieTitle: string, city?: string, date?: string): Promise<Array<Record<string, any>>>;
+  movies(city?: string, context?: AgentContext): Promise<Movie[]>;
+  shows(movieTitle: string, city?: string, date?: string, context?: AgentContext): Promise<Array<Record<string, any>>>;
 };
 
 const productionData: CinemaData = {
@@ -27,14 +27,14 @@ const productionData: CinemaData = {
       orderBy: [{ city: { name: 'asc' } }, { name: 'asc' }],
     });
   },
-  async movies(city) {
+  async movies(city, context) {
     return invokeTool(movieSearchTool, { ...(city ? { city } : {}) }, {
-      runId: 'conversation-data', conversationId: 'conversation-data', agentId: 'conversation-intent', agentName: 'Conversation and Intent Agent', signal: new AbortController().signal,
+      runId: context?.runId ?? 'conversation-data', conversationId: context?.conversationId ?? 'conversation-data', agentId: 'conversation-intent', agentName: 'Conversation and Intent Agent', signal: context?.signal ?? new AbortController().signal,
     });
   },
-  async shows(movieTitle, city, date) {
+  async shows(movieTitle, city, date, context) {
     return invokeTool(showtimeSearchTool, { movieTitle, ...(city ? { city } : {}), ...(date ? { date } : {}) }, {
-      runId: 'conversation-data', conversationId: 'conversation-data', agentId: 'conversation-intent', agentName: 'Conversation and Intent Agent', signal: new AbortController().signal,
+      runId: context?.runId ?? 'conversation-data', conversationId: context?.conversationId ?? 'conversation-data', agentId: 'conversation-intent', agentName: 'Conversation and Intent Agent', signal: context?.signal ?? new AbortController().signal,
     }) as Promise<Array<Record<string, any>>>;
   },
 };
@@ -169,7 +169,7 @@ export class ConversationIntentAgent implements Agent {
           intent: 'booking', needsClarification: true, evidence: cities,
         });
       }
-      const availableMovies = await this.data.movies(currentCity.name);
+      const availableMovies = await this.data.movies(currentCity.name, context);
       return result({
         response: `${formatMovies(availableMovies, `Movies currently listed in ${currentCity.name}`)}\n\nWhich movie would you like to book?`,
         intent: 'booking', constraints: { city: currentCity.name }, needsClarification: true,
@@ -192,7 +192,7 @@ export class ConversationIntentAgent implements Agent {
       return result({ response: `${heading}:\n${theatres.map(theatre => `• ${theatre.name} — ${theatre.address}, ${theatre.city.name}`).join('\n')}`, intent: 'general_cinema_help', constraints: { city: currentCity?.name ?? null }, evidence: theatres });
     }
 
-    const movies = asksShowtimes || asksMovies ? await this.data.movies(currentCity?.name) : [];
+    const movies = asksShowtimes || asksMovies ? await this.data.movies(currentCity?.name, context) : [];
     const movie = matchedMovie(movies, effectiveMessage);
     const language = ['hindi', 'english', 'marathi', 'tamil', 'telugu', 'kannada', 'malayalam', 'bengali'].find(item => new RegExp(`\\b${item}\\b`, 'i').test(effectiveMessage));
     const genre = normalizeGenrePreference(effectiveMessage);
@@ -207,7 +207,7 @@ export class ConversationIntentAgent implements Agent {
         return result({ response: 'Which movie and city should I check for showtimes and prices?', intent: 'showtime_search', needsClarification: true, evidence: movies });
       }
       const date = requestedDate(effectiveMessage) ?? 'today';
-      const shows = await this.data.shows(movie.title, currentCity?.name, date);
+      const shows = await this.data.shows(movie.title, currentCity?.name, date, context);
       return result({ response: formatShowtimeRecords(shows), intent: 'showtime_search', constraints: { movieTitle: movie.title, city: currentCity?.name ?? null, date }, toolCalls: ['showtime_search'], selectedTool: 'showtime_search', evidence: shows });
     }
 

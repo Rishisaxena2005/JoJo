@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Search, MapPin, Film, Ticket, ChevronDown, Menu, X, Clapperboard } from 'lucide-react';
+import { Search, MapPin, Film, Ticket, ChevronDown, Menu, X, Clapperboard, Activity } from 'lucide-react';
 import { moviesApi } from '../../services/apiClient';
 import { getPreferredCity, setPreferredCity } from '../../utils';
 import type { City } from '../../types';
@@ -96,6 +96,10 @@ export default function Navbar() {
               <Ticket className="w-4 h-4" />
               My Bookings
             </Link>
+            <Link to="/agent-dashboard" className="flex items-center gap-1.5 text-sm text-gray-300 hover:text-white px-3 py-2 rounded-lg hover:bg-navy-700 transition-colors">
+              <Activity className="w-4 h-4" />
+              Agents
+            </Link>
             <div className="ml-2 flex items-center gap-2 bg-navy-700 px-3 py-1.5 rounded-full border border-navy-600">
               <div className="w-7 h-7 bg-brand-500 rounded-full flex items-center justify-center text-xs font-bold">D</div>
               <span className="text-sm text-gray-300">Demo User</span>
@@ -138,6 +142,7 @@ export default function Navbar() {
             </div>
             <Link to="/" className="block text-gray-300 hover:text-white py-2 text-sm" onClick={() => setMobileOpen(false)}>Movies</Link>
             <Link to="/my-bookings" className="block text-gray-300 hover:text-white py-2 text-sm" onClick={() => setMobileOpen(false)}>My Bookings</Link>
+            <Link to="/agent-dashboard" className="block text-gray-300 hover:text-white py-2 text-sm" onClick={() => setMobileOpen(false)}>Agent Dashboard</Link>
           </div>
         )}
       </div>

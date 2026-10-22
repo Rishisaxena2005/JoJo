@@ -8,6 +8,7 @@ import BookingReviewPage from './pages/BookingReviewPage';
 import PaymentPage from './pages/PaymentPage';
 import ConfirmationPage from './pages/ConfirmationPage';
 import MyBookingsPage from './pages/MyBookingsPage';
+import AgentDashboardPage from './pages/AgentDashboardPage';
 
 function NotFound() {
   return (
@@ -34,6 +35,7 @@ export default function App() {
             <Route path="/payment/:bookingId" element={<PaymentPage />} />
             <Route path="/confirmation/:bookingId" element={<ConfirmationPage />} />
             <Route path="/my-bookings" element={<MyBookingsPage />} />
+            <Route path="/agent-dashboard" element={<AgentDashboardPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
