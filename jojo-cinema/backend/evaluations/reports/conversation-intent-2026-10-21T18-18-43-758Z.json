@@ -1,0 +1,373 @@
+{
+  "schemaVersion": 1,
+  "runAt": "2026-10-21T18:18:43.756Z",
+  "caseCount": 15,
+  "metrics": {
+    "intentAccuracy": 0.13333333333333333,
+    "constraintPrecision": 1,
+    "constraintRecall": 0.06666666666666667,
+    "constraintF1": 0.125,
+    "clarificationAccuracy": 0.06666666666666667,
+    "toolSelectionAccuracy": 0.06666666666666667,
+    "contextRetention": 0,
+    "clarificationQuestionQuality": null,
+    "responseQuality": 4.5,
+    "unsupportedClaimRate": 0,
+    "p95LatencyMs": 7295,
+    "meanAgentCostUsd": 0,
+    "totalAgentCostUsd": 0,
+    "totalJudgeCostUsd": 0
+  },
+  "thresholds": {
+    "minIntentAccuracy": 0.9,
+    "minConstraintF1": 0.85,
+    "minClarificationAccuracy": 0.9,
+    "minToolSelectionAccuracy": 0.9,
+    "minContextRetention": 1,
+    "minClarificationQuality": 0.9,
+    "minResponseQuality": 4,
+    "maxUnsupportedClaimRate": 0,
+    "maxP95LatencyMs": 10000,
+    "maxMeanAgentCostUsd": 0.01
+  },
+  "acceptance": {
+    "evaluated": false,
+    "passed": false,
+    "failedCriteria": [
+      "intentAccuracy",
+      "constraintF1",
+      "clarificationAccuracy",
+      "toolSelectionAccuracy",
+      "contextRetention",
+      "clarificationQuestionQuality"
+    ]
+  },
+  "caseResults": [
+    {
+      "id": "direct-comedy",
+      "category": "direct",
+      "passed": false,
+      "expectedIntent": "movie_discovery",
+      "expectedClarification": false,
+      "expectedTool": "mock_movie_search",
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 2,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution"
+    },
+    {
+      "id": "city-movie-search",
+      "category": "direct",
+      "passed": false,
+      "response": "Would you like to search for movies in a specific genre (e.g., action, horror), language, or rating?",
+      "expectedIntent": "movie_discovery",
+      "actualIntent": "movie_discovery",
+      "expectedClarification": false,
+      "actualClarification": true,
+      "expectedTool": "mock_movie_search",
+      "actualTool": null,
+      "constraintTruePositives": 1,
+      "expectedConstraintCount": 1,
+      "extractedConstraintCount": 1,
+      "latencyMs": 7295,
+      "agentCostUsd": 0,
+      "judge": {
+        "grounded": true,
+        "contextRetained": true,
+        "clarificationAppropriate": false,
+        "qualityScore": 4,
+        "notes": [
+          "The assistant correctly identified the need for clarification regarding specific filters like genres, languages, or ratings to refine movie search results."
+        ]
+      },
+      "judgeCostUsd": 0,
+      "unsupportedClaimDetected": false
+    },
+    {
+      "id": "multi-constraint",
+      "category": "multiple constraints",
+      "passed": false,
+      "expectedIntent": "movie_discovery",
+      "expectedClarification": false,
+      "expectedTool": "mock_movie_search",
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 4,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution"
+    },
+    {
+      "id": "colloquial-typos",
+      "category": "colloquial and typos",
+      "passed": false,
+      "expectedIntent": "movie_discovery",
+      "expectedClarification": false,
+      "expectedTool": "mock_movie_search",
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 1,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution"
+    },
+    {
+      "id": "showtime-missing-title",
+      "category": "vague request",
+      "passed": false,
+      "expectedIntent": "showtime_search",
+      "expectedClarification": true,
+      "expectedTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 2,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution"
+    },
+    {
+      "id": "follow-up-city",
+      "category": "follow-up context",
+      "passed": false,
+      "expectedIntent": "showtime_search",
+      "expectedClarification": false,
+      "expectedTool": "mock_showtime_search",
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 2,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution"
+    },
+    {
+      "id": "ambiguous-booking",
+      "category": "ambiguous booking",
+      "passed": false,
+      "expectedIntent": "booking",
+      "expectedClarification": true,
+      "expectedTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 0,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution"
+    },
+    {
+      "id": "seat-selection-incomplete",
+      "category": "vague request",
+      "passed": true,
+      "response": "Which movie showtime and city would you like to sit for?",
+      "expectedIntent": "seat_selection",
+      "actualIntent": "seat_selection",
+      "expectedClarification": true,
+      "actualClarification": true,
+      "expectedTool": null,
+      "actualTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 0,
+      "extractedConstraintCount": 0,
+      "latencyMs": 5739,
+      "agentCostUsd": 0,
+      "judge": {
+        "grounded": true,
+        "contextRetained": false,
+        "clarificationAppropriate": true,
+        "qualityScore": 5,
+        "notes": [
+          "User requested seat selection but not clarified movie, city, or time."
+        ]
+      },
+      "judgeCostUsd": 0,
+      "unsupportedClaimDetected": false
+    },
+    {
+      "id": "conflicting-preferences",
+      "category": "conflicting preferences",
+      "passed": false,
+      "expectedIntent": "movie_discovery",
+      "expectedClarification": true,
+      "expectedTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 0,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution"
+    },
+    {
+      "id": "out-of-domain",
+      "category": "out of domain",
+      "passed": false,
+      "expectedIntent": "out_of_domain",
+      "expectedClarification": false,
+      "expectedTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 0,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution"
+    },
+    {
+      "id": "booking-support",
+      "category": "booking support",
+      "passed": false,
+      "expectedIntent": "booking_support",
+      "expectedClarification": true,
+      "expectedTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 0,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution"
+    },
+    {
+      "id": "payment-claim-adversarial",
+      "category": "adversarial",
+      "passed": false,
+      "expectedIntent": "booking_support",
+      "expectedClarification": false,
+      "expectedTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 0,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution"
+    },
+    {
+      "id": "unavailable-movie",
+      "category": "unavailable information",
+      "passed": false,
+      "expectedIntent": "movie_discovery",
+      "expectedClarification": false,
+      "expectedTool": "mock_movie_search",
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 1,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution"
+    },
+    {
+      "id": "unknown-payment-state",
+      "category": "unavailable information",
+      "passed": false,
+      "expectedIntent": "booking_support",
+      "expectedClarification": true,
+      "expectedTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 0,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution"
+    },
+    {
+      "id": "family-language-city",
+      "category": "multiple constraints",
+      "passed": false,
+      "expectedIntent": "movie_discovery",
+      "expectedClarification": false,
+      "expectedTool": "mock_movie_search",
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 2,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution"
+    }
+  ],
+  "representativeFailures": [
+    {
+      "id": "direct-comedy",
+      "category": "direct",
+      "passed": false,
+      "expectedIntent": "movie_discovery",
+      "expectedClarification": false,
+      "expectedTool": "mock_movie_search",
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 2,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution"
+    },
+    {
+      "id": "city-movie-search",
+      "category": "direct",
+      "passed": false,
+      "response": "Would you like to search for movies in a specific genre (e.g., action, horror), language, or rating?",
+      "expectedIntent": "movie_discovery",
+      "actualIntent": "movie_discovery",
+      "expectedClarification": false,
+      "actualClarification": true,
+      "expectedTool": "mock_movie_search",
+      "actualTool": null,
+      "constraintTruePositives": 1,
+      "expectedConstraintCount": 1,
+      "extractedConstraintCount": 1,
+      "latencyMs": 7295,
+      "agentCostUsd": 0,
+      "judge": {
+        "grounded": true,
+        "contextRetained": true,
+        "clarificationAppropriate": false,
+        "qualityScore": 4,
+        "notes": [
+          "The assistant correctly identified the need for clarification regarding specific filters like genres, languages, or ratings to refine movie search results."
+        ]
+      },
+      "judgeCostUsd": 0,
+      "unsupportedClaimDetected": false
+    },
+    {
+      "id": "multi-constraint",
+      "category": "multiple constraints",
+      "passed": false,
+      "expectedIntent": "movie_discovery",
+      "expectedClarification": false,
+      "expectedTool": "mock_movie_search",
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 4,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution"
+    },
+    {
+      "id": "colloquial-typos",
+      "category": "colloquial and typos",
+      "passed": false,
+      "expectedIntent": "movie_discovery",
+      "expectedClarification": false,
+      "expectedTool": "mock_movie_search",
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 1,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution"
+    },
+    {
+      "id": "showtime-missing-title",
+      "category": "vague request",
+      "passed": false,
+      "expectedIntent": "showtime_search",
+      "expectedClarification": true,
+      "expectedTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 2,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution"
+    },
+    {
+      "id": "follow-up-city",
+      "category": "follow-up context",
+      "passed": false,
+      "expectedIntent": "showtime_search",
+      "expectedClarification": false,
+      "expectedTool": "mock_showtime_search",
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 2,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution"
+    },
+    {
+      "id": "ambiguous-booking",
+      "category": "ambiguous booking",
+      "passed": false,
+      "expectedIntent": "booking",
+      "expectedClarification": true,
+      "expectedTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 0,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution"
+    },
+    {
+      "id": "conflicting-preferences",
+      "category": "conflicting preferences",
+      "passed": false,
+      "expectedIntent": "movie_discovery",
+      "expectedClarification": true,
+      "expectedTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 0,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution"
+    }
+  ]
+}

@@ -33,11 +33,10 @@ export async function getShows(filters: ShowFilters) {
     const cityRecord = await prisma.city.findFirst({
       where: { name: { equals: city, mode: 'insensitive' } },
     });
-    if (cityRecord) {
-      where.screen = {
-        ...where.screen,
-        theatre: { cityId: cityRecord.id },
-      };
+    if (!cityRecord) return [];
+    where.screen = {
+      ...where.screen,
+      theatre: { cityId: cityRecord.id },
     }
   }
 

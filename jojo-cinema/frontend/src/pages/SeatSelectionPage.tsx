@@ -75,6 +75,35 @@ export default function SeatSelectionPage() {
   const convenienceFee = Math.round(totalAmount * 0.02 + selected.length * 5);
   const grandTotal = totalAmount + convenienceFee;
 
+  const seatGroups = (() => {
+    const sortedRows = [...seatMap.rows];
+    const groups: Array<{ type: string; rows: SeatRow[]; minPrice: number; maxPrice: number }> = [];
+    for (const row of sortedRows) {
+      const counts = new Map<string, { count: number; price: number }>();
+      for (const seat of row.seats) {
+        const current = counts.get(seat.seatType) ?? { count: 0, price: seat.price };
+        current.count += 1;
+        current.price = Math.min(current.price, seat.price);
+        counts.set(seat.seatType, current);
+      }
+      const type = [...counts.entries()].sort((a, b) => b[1].count - a[1].count)[0]?.[0] ?? 'STANDARD';
+      const rowPrices = row.seats.filter(seat => seat.seatType === type).map(seat => seat.price);
+      const minPrice = Math.min(...rowPrices);
+      const maxPrice = Math.max(...rowPrices);
+      const last = groups[groups.length - 1];
+      if (last?.type === type) {
+        last.rows.push(row);
+        last.minPrice = Math.min(last.minPrice, minPrice);
+        last.maxPrice = Math.max(last.maxPrice, maxPrice);
+      } else groups.push({ type, rows: [row], minPrice, maxPrice });
+    }
+    return groups;
+  })();
+
+  const categoryName = (type: string) => ({
+    STANDARD: 'Classic', PREMIUM: 'Prime', RECLINER: 'Recliner', VIP: 'VIP',
+  }[type] ?? type.toLowerCase().replace(/(^|_)(\w)/g, (_, space, letter) => `${space ? ' ' : ''}${letter.toUpperCase()}`));
+
   const handleContinue = async () => {
     if (!showId || selected.length === 0) return;
     setLocking(true);
@@ -138,45 +167,63 @@ export default function SeatSelectionPage() {
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Seat map */}
         <div className="flex-1">
-          {/* Screen */}
-          <div className="relative mb-8">
-            <div className="h-2 bg-gradient-to-r from-transparent via-brand-400 to-transparent rounded-full mb-1" />
-            <p className="text-center text-xs text-gray-400 uppercase tracking-widest">Screen</p>
-          </div>
-
-          {/* Legend */}
-          <div className="flex gap-4 justify-center mb-6 flex-wrap text-xs">
-            {[
-              { cls: 'seat-available', label: 'Available' },
-              { cls: 'seat-selected', label: 'Selected' },
-              { cls: 'seat-premium seat-available', label: 'Premium' },
-              { cls: 'seat-booked', label: 'Booked' },
-              { cls: 'seat-locked', label: 'Held' },
-            ].map(({ cls, label }) => (
-              <div key={label} className="flex items-center gap-1.5">
-                <div className={`w-5 h-5 rounded ${cls}`} />
-                <span className="text-gray-600">{label}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Rows */}
-          <div className="space-y-2 overflow-x-auto">
-            {seatMap.rows.map((row: SeatRow) => (
-              <div key={row.rowLabel} className="flex items-center gap-2 justify-center">
-                <span className="text-xs font-bold text-gray-400 w-5 text-right shrink-0">{row.rowLabel}</span>
-                <div className="flex gap-1 flex-wrap">
-                  {row.seats.map((seat: SeatInfo) => (
-                    <SeatButton
-                      key={seat.showSeatId}
-                      seat={seat}
-                      selected={!!selected.find(s => s.showSeatId === seat.showSeatId)}
-                      onToggle={toggleSeat}
-                    />
-                  ))}
+          {/* BookMyShow-style category bands, aisle, and seat map */}
+          <div className="rounded-2xl border border-gray-100 bg-white px-3 py-5 sm:px-6">
+            <div className="flex gap-4 justify-center mb-7 flex-wrap text-xs">
+              {[
+                { cls: 'seat-available', label: 'Available' },
+                { cls: 'seat-selected', label: 'Selected' },
+                { cls: 'seat-booked', label: 'Booked' },
+                { cls: 'seat-locked', label: 'Held' },
+              ].map(({ cls, label }) => (
+                <div key={label} className="flex items-center gap-1.5">
+                  <div className={`w-5 h-5 rounded ${cls}`} />
+                  <span className="text-gray-600">{label}</span>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+
+            <div className="space-y-8 overflow-x-auto pb-2">
+              {seatGroups.map(group => (
+                <section key={`${group.type}-${group.rows[0]?.rowLabel}`} className="min-w-max">
+                  <h2 className="text-center text-sm font-semibold uppercase text-gray-700 border-b border-gray-200 pb-2 mb-3">
+                    {group.minPrice === group.maxPrice
+                      ? formatCurrency(group.minPrice)
+                      : `${formatCurrency(group.minPrice)}–${formatCurrency(group.maxPrice)}`} {categoryName(group.type)} rows
+                  </h2>
+                  <div className="space-y-2">
+                    {group.rows.map((row: SeatRow) => (
+                      <div key={row.rowLabel} className="flex items-center gap-3">
+                        <span className="text-sm font-bold text-gray-500 w-5 text-center shrink-0">{row.rowLabel}</span>
+                        <div className="flex items-center gap-1.5">
+                          {[...row.seats].sort((a, b) => Number(a.seatLabel.match(/\d+/)?.[0]) - Number(b.seatLabel.match(/\d+/)?.[0])).map((seat: SeatInfo, index, orderedSeats) => {
+                            const previousNumber = Number(orderedSeats[index - 1]?.seatLabel.match(/\d+/)?.[0]);
+                            const number = Number(seat.seatLabel.match(/\d+/)?.[0]);
+                            const aisle = index > 0 && (
+                              number - previousNumber > 1 || index === Math.floor(orderedSeats.length / 2)
+                            );
+                            return (
+                              <div key={seat.showSeatId} className={aisle ? 'ml-4 sm:ml-8' : ''}>
+                                <SeatButton
+                                  seat={seat}
+                                  selected={!!selected.find(s => s.showSeatId === seat.showSeatId)}
+                                  onToggle={toggleSeat}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+
+            <div className="mt-8 pt-2">
+              <div className="mx-auto h-3 max-w-md rounded-[50%] border-t-4 border-sky-200 bg-gradient-to-b from-sky-100 to-transparent" />
+              <p className="text-center text-xs text-gray-400 mt-2">SCREEN · All eyes this way</p>
+            </div>
           </div>
         </div>
 

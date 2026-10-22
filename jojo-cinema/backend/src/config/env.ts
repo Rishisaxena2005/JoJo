@@ -15,6 +15,17 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().default('change-this-in-production'),
   WEBHOOK_SECRET: z.string().default('webhook-secret'),
   JOJO_BOOKING_API_BASE_URL: z.string().default('http://localhost:4000/api'),
+  OPENAI_API_KEY: z.string().optional(),
+  AGENT_PROVIDER: z.enum(['openai', 'ollama']).default('openai'),
+  OLLAMA_BASE_URL: z.string().url().default('http://127.0.0.1:11434/v1'),
+  AGENT_MODEL: z.string().default('gpt-6-luna'),
+  AGENT_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
+  AGENT_MAX_RETRIES: z.coerce.number().int().nonnegative().default(1),
+  AGENT_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().default(1000),
+  AGENT_MAX_COST_USD: z.coerce.number().positive().default(0.05),
+  AGENT_EVAL_MAX_COST_USD: z.coerce.number().positive().default(0.5),
+  AGENT_INPUT_COST_PER_1M_USD: z.coerce.number().nonnegative().default(0.1),
+  AGENT_OUTPUT_COST_PER_1M_USD: z.coerce.number().nonnegative().default(0.5),
 });
 
 const parsed = envSchema.safeParse(process.env);

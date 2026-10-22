@@ -128,6 +128,7 @@ const CITIES = [
   { name: 'Pune', state: 'Maharashtra' },
   { name: 'Mumbai', state: 'Maharashtra' },
   { name: 'Bengaluru', state: 'Karnataka' },
+  { name: 'Delhi', state: 'Delhi' },
 ];
 
 // ─── Main Seed Function ─────────────────────────────────────────────────────
@@ -182,6 +183,7 @@ async function main() {
       screens: [
         { name: 'Screen 1 — IMAX', rows: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'], seatsPerRow: 12, premiumRows: ['A', 'B'] },
         { name: 'Screen 2 — 4DX', rows: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], seatsPerRow: 10, premiumRows: ['A', 'B'] },
+        { name: 'Screen 3 — Demo', rows: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], seatsPerRow: 10, premiumRows: ['A', 'B'] },
       ],
     },
     {
@@ -191,6 +193,7 @@ async function main() {
       screens: [
         { name: 'Audi 1', rows: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'], seatsPerRow: 10, premiumRows: ['A', 'B'] },
         { name: 'Audi 2', rows: ['A', 'B', 'C', 'D', 'E', 'F', 'G'], seatsPerRow: 8, premiumRows: ['A'] },
+        { name: 'Audi 3 — Demo', rows: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], seatsPerRow: 10, premiumRows: ['A', 'B'] },
       ],
     },
     {
@@ -209,6 +212,7 @@ async function main() {
       screens: [
         { name: 'Screen 1', rows: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'], seatsPerRow: 12, premiumRows: ['A', 'B', 'C'] },
         { name: 'Screen 2', rows: ['A', 'B', 'C', 'D', 'E', 'F', 'G'], seatsPerRow: 10, premiumRows: ['A', 'B'] },
+        { name: 'Screen 3 — Demo', rows: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], seatsPerRow: 10, premiumRows: ['A', 'B'] },
       ],
     },
     {
@@ -218,6 +222,62 @@ async function main() {
       screens: [
         { name: 'Audi 1', rows: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], seatsPerRow: 10, premiumRows: ['A', 'B'] },
         { name: 'Audi 2', rows: ['A', 'B', 'C', 'D', 'E', 'F'], seatsPerRow: 8, premiumRows: ['A'] },
+      ],
+    },
+    {
+      name: 'PVR Cinemas — Orion Mall (Demo)',
+      city: 'Bengaluru',
+      address: 'Orion Mall, Dr Rajkumar Road, Bengaluru (demo listing)',
+      screens: [
+        { name: 'Screen 1 — Demo', rows: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], seatsPerRow: 10, premiumRows: ['A', 'B'] },
+      ],
+    },
+    {
+      name: 'Cinépolis — Central Bengaluru (Demo)',
+      city: 'Bengaluru',
+      address: 'Central Bengaluru (demo listing)',
+      screens: [
+        { name: 'Hall 1 — Demo', rows: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], seatsPerRow: 10, premiumRows: ['A', 'B'] },
+      ],
+    },
+    {
+      name: 'INOX — R City Mall (Demo)',
+      city: 'Mumbai',
+      address: 'R City Mall, Ghatkopar, Mumbai (demo listing)',
+      screens: [
+        { name: 'Screen 1 — Demo', rows: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], seatsPerRow: 10, premiumRows: ['A', 'B'] },
+      ],
+    },
+    {
+      name: 'Cinépolis — Western Mumbai (Demo)',
+      city: 'Mumbai',
+      address: 'Western Mumbai (demo listing)',
+      screens: [
+        { name: 'Hall 1 — Demo', rows: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], seatsPerRow: 10, premiumRows: ['A', 'B'] },
+      ],
+    },
+    {
+      name: 'PVR Cinemas — Select Citywalk (Demo)',
+      city: 'Delhi',
+      address: 'Select Citywalk, Saket, Delhi (demo listing)',
+      screens: [
+        { name: 'Screen 1 — Demo', rows: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], seatsPerRow: 10, premiumRows: ['A', 'B'] },
+      ],
+    },
+    {
+      name: 'INOX — Connaught Place (Demo)',
+      city: 'Delhi',
+      address: 'Connaught Place, New Delhi (demo listing)',
+      screens: [
+        { name: 'Screen 1 — Demo', rows: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], seatsPerRow: 10, premiumRows: ['A', 'B'] },
+      ],
+    },
+    {
+      name: 'Cinépolis — Vasant Kunj (Demo)',
+      city: 'Delhi',
+      address: 'Vasant Kunj, Delhi (demo listing)',
+      screens: [
+        { name: 'Hall 1 — Demo', rows: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], seatsPerRow: 10, premiumRows: ['A', 'B'] },
       ],
     },
   ];
@@ -319,6 +379,13 @@ async function main() {
       showtimes: [{ hour: 11, minute: 30 }, { hour: 16, minute: 0 }, { hour: 20, minute: 30 }],
       format: '4DX',
     },
+    {
+      movieTitle: 'Raga of the Night',
+      theatreName: 'PVR Cinemas — Phoenix MarketCity',
+      screenName: 'Screen 3 — Demo',
+      showtimes: [{ hour: 10, minute: 0 }, { hour: 15, minute: 30 }, { hour: 20, minute: 0 }],
+      format: '2D',
+    },
     // Pune — INOX
     {
       movieTitle: 'Stellar Drift',
@@ -332,6 +399,13 @@ async function main() {
       theatreName: 'INOX — Bund Garden',
       screenName: 'Audi 2',
       showtimes: [{ hour: 10, minute: 30 }, { hour: 14, minute: 0 }, { hour: 18, minute: 30 }],
+      format: '2D',
+    },
+    {
+      movieTitle: 'Raga of the Night',
+      theatreName: 'INOX — Bund Garden',
+      screenName: 'Audi 3 — Demo',
+      showtimes: [{ hour: 11, minute: 30 }, { hour: 16, minute: 0 }, { hour: 20, minute: 30 }],
       format: '2D',
     },
     // Pune — Cinépolis
@@ -364,6 +438,27 @@ async function main() {
       showtimes: [{ hour: 11, minute: 0 }, { hour: 15, minute: 30 }, { hour: 20, minute: 0 }],
       format: '2D',
     },
+    {
+      movieTitle: 'Raga of the Night',
+      theatreName: 'PVR Cinemas — Palladium Mall',
+      screenName: 'Screen 3 — Demo',
+      showtimes: [{ hour: 10, minute: 0 }, { hour: 15, minute: 30 }, { hour: 20, minute: 0 }],
+      format: '2D',
+    },
+    {
+      movieTitle: 'Raga of the Night',
+      theatreName: 'INOX — R City Mall (Demo)',
+      screenName: 'Screen 1 — Demo',
+      showtimes: [{ hour: 11, minute: 0 }, { hour: 16, minute: 0 }, { hour: 21, minute: 0 }],
+      format: '2D',
+    },
+    {
+      movieTitle: 'Raga of the Night',
+      theatreName: 'Cinépolis — Western Mumbai (Demo)',
+      screenName: 'Hall 1 — Demo',
+      showtimes: [{ hour: 9, minute: 30 }, { hour: 14, minute: 30 }, { hour: 19, minute: 30 }],
+      format: '2D',
+    },
     // Bengaluru — INOX
     {
       movieTitle: 'Raga of the Night',
@@ -377,6 +472,42 @@ async function main() {
       theatreName: 'INOX Garuda Mall',
       screenName: 'Audi 2',
       showtimes: [{ hour: 10, minute: 0 }, { hour: 14, minute: 30 }, { hour: 19, minute: 0 }],
+      format: '2D',
+    },
+    {
+      movieTitle: 'Raga of the Night',
+      theatreName: 'PVR Cinemas — Orion Mall (Demo)',
+      screenName: 'Screen 1 — Demo',
+      showtimes: [{ hour: 10, minute: 30 }, { hour: 15, minute: 30 }, { hour: 20, minute: 0 }],
+      format: '2D',
+    },
+    {
+      movieTitle: 'Raga of the Night',
+      theatreName: 'Cinépolis — Central Bengaluru (Demo)',
+      screenName: 'Hall 1 — Demo',
+      showtimes: [{ hour: 11, minute: 0 }, { hour: 16, minute: 30 }, { hour: 21, minute: 0 }],
+      format: '2D',
+    },
+    // Delhi — three demo venues
+    {
+      movieTitle: 'Raga of the Night',
+      theatreName: 'PVR Cinemas — Select Citywalk (Demo)',
+      screenName: 'Screen 1 — Demo',
+      showtimes: [{ hour: 10, minute: 0 }, { hour: 15, minute: 30 }, { hour: 20, minute: 0 }],
+      format: '2D',
+    },
+    {
+      movieTitle: 'Raga of the Night',
+      theatreName: 'INOX — Connaught Place (Demo)',
+      screenName: 'Screen 1 — Demo',
+      showtimes: [{ hour: 11, minute: 0 }, { hour: 16, minute: 0 }, { hour: 21, minute: 0 }],
+      format: '2D',
+    },
+    {
+      movieTitle: 'Raga of the Night',
+      theatreName: 'Cinépolis — Vasant Kunj (Demo)',
+      screenName: 'Hall 1 — Demo',
+      showtimes: [{ hour: 9, minute: 30 }, { hour: 14, minute: 30 }, { hour: 19, minute: 30 }],
       format: '2D',
     },
   ];
@@ -465,7 +596,7 @@ async function main() {
     // Mark a few seats as BOOKED for demo realism
     const seatIdsToBook = demoShow.showSeats.slice(0, 4).map(ss => ss.id);
     await prisma.showSeat.updateMany({
-      where: { id: { in: seatIdsToBook } },
+      where: { id: { in: seatIdsToBook }, status: 'AVAILABLE' },
       data: { status: 'BOOKED' },
     });
     console.log(`  ✓ Marked ${seatIdsToBook.length} seats as BOOKED in demo show`);

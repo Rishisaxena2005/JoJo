@@ -19,6 +19,7 @@ const seatLocks_1 = __importDefault(require("./routes/seatLocks"));
 const bookings_1 = __importDefault(require("./routes/bookings"));
 const payments_1 = __importDefault(require("./routes/payments"));
 const tickets_1 = __importDefault(require("./routes/tickets"));
+const agent_1 = __importDefault(require("./routes/agent"));
 const app = (0, express_1.default)();
 // ─── Security ────────────────────────────────────────────────────────────────
 app.use((0, helmet_1.default)());
@@ -63,6 +64,7 @@ app.use('/api/seat-locks', seatLocks_1.default);
 app.use('/api/bookings', bookings_1.default);
 app.use('/api/payments', payments_1.default);
 app.use('/api/tickets', tickets_1.default);
+app.use('/api/agent', agent_1.default);
 // ─── API Info ────────────────────────────────────────────────────────────────
 app.get('/api', (_req, res) => {
     res.json({
@@ -89,6 +91,7 @@ app.get('/api', (_req, res) => {
             'POST /api/payments/:paymentId/simulate',
             'POST /api/payments/webhook',
             'GET  /api/tickets/:ticketReference/verify',
+            'POST /api/agent/chat',
         ],
     });
 });

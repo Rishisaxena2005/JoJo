@@ -31,12 +31,12 @@ async function getShows(filters) {
         const cityRecord = await database_1.default.city.findFirst({
             where: { name: { equals: city, mode: 'insensitive' } },
         });
-        if (cityRecord) {
-            where.screen = {
-                ...where.screen,
-                theatre: { cityId: cityRecord.id },
-            };
-        }
+        if (!cityRecord)
+            return [];
+        where.screen = {
+            ...where.screen,
+            theatre: { cityId: cityRecord.id },
+        };
     }
     const shows = await database_1.default.show.findMany({
         where,

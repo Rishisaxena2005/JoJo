@@ -38,17 +38,18 @@ export async function getMovies(filters: MovieFilters) {
     const cityRecord = await prisma.city.findFirst({
       where: { name: { equals: city, mode: 'insensitive' } },
     });
-    if (cityRecord) {
-      where.shows = {
-        some: {
-          status: 'SCHEDULED',
-          startTime: { gte: new Date() },
-          screen: {
-            theatre: { cityId: cityRecord.id },
-          },
-        },
-      };
+    if (!cityRecord) {
+      return { items: [], pagination: { page, limit, total: 0, totalPages: 0 } };
     }
+    where.shows = {
+      some: {
+        status: 'SCHEDULED',
+        startTime: { gte: new Date() },
+        screen: {
+          theatre: { cityId: cityRecord.id },
+        },
+      },
+    };
   }
 
   const [total, movies] = await Promise.all([

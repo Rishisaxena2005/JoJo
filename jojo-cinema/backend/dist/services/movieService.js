@@ -30,17 +30,18 @@ async function getMovies(filters) {
         const cityRecord = await database_1.default.city.findFirst({
             where: { name: { equals: city, mode: 'insensitive' } },
         });
-        if (cityRecord) {
-            where.shows = {
-                some: {
-                    status: 'SCHEDULED',
-                    startTime: { gte: new Date() },
-                    screen: {
-                        theatre: { cityId: cityRecord.id },
-                    },
-                },
-            };
+        if (!cityRecord) {
+            return { items: [], pagination: { page, limit, total: 0, totalPages: 0 } };
         }
+        where.shows = {
+            some: {
+                status: 'SCHEDULED',
+                startTime: { gte: new Date() },
+                screen: {
+                    theatre: { cityId: cityRecord.id },
+                },
+            },
+        };
     }
     const [total, movies] = await Promise.all([
         database_1.default.movie.count({ where }),

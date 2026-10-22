@@ -2,6 +2,10 @@
 
 This guide is written for the developer building the WhatsApp multi-agent system (JoJo). The 5 AI agents communicate with JoJo Cinema backend via REST endpoints.
 
+For the conversational movie/showtime assistant, the Telegram adapter can call `POST /api/agent/chat`. It accepts `{ "message": "...", "conversationId": "telegram-chat-id", "history": [] }` and returns `data.reply`. The adapter should send that reply back to the originating Telegram chat. Keep the Telegram bot token in the adapter's environment; it is not needed by this API endpoint.
+
+For a local demo, set `TELEGRAM_BOT_TOKEN` in `backend/.env`, start the cinema backend, then run `npm run telegram:dev` from `backend/`. This uses Telegram long polling, so the laptop must remain awake and connected to the internet. Stop any other process currently polling this bot first; Telegram permits only one active `getUpdates` poller per bot token.
+
 ---
 
 ## 🧭 System Overview & Base URL

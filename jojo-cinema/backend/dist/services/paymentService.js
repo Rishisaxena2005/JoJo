@@ -51,19 +51,38 @@ async function checkout(input) {
         await database_1.default.booking.update({ where: { id: bookingId }, data: { status: 'EXPIRED' } });
         throw new errorHandler_1.AppError(409, api_1.ErrorCodes.BOOKING_EXPIRED, 'Booking has expired. Please select seats again');
     }
-    // Create payment record
-    const payment = await database_1.default.payment.create({
-        data: {
-            bookingId,
-            provider: 'MOCK',
-            providerPaymentId: `mock_pay_${(0, uuid_1.v4)()}`,
-            amount: booking.totalAmount,
-            currency: booking.currency,
-            status: 'PENDING',
-            idempotencyKey,
-        },
+    // Idempotency: return existing payment if already created
+    const existingPayment = await database_1.default.payment.findUnique({
+        where: { idempotencyKey },
     });
-    return payment;
+    if (existingPayment) {
+        return existingPayment;
+    }
+    // Create payment record with concurrent idempotency handling
+    try {
+        const payment = await database_1.default.payment.create({
+            data: {
+                bookingId,
+                provider: 'MOCK',
+                providerPaymentId: `mock_pay_${(0, uuid_1.v4)()}`,
+                amount: booking.totalAmount,
+                currency: booking.currency,
+                status: 'PENDING',
+                idempotencyKey,
+            },
+        });
+        return payment;
+    }
+    catch (err) {
+        if (err?.code === 'P2002') {
+            const existing = await database_1.default.payment.findUnique({
+                where: { idempotencyKey },
+            });
+            if (existing)
+                return existing;
+        }
+        throw err;
+    }
 }
 async function getPaymentStatus(paymentId) {
     const payment = await database_1.default.payment.findUnique({

@@ -12,13 +12,20 @@ const PORT = env_1.env.PORT;
 async function startServer() {
     try {
         // Verify DB connection
-        await database_1.default.$connect();
-        logger_1.logger.info('✅ Database connected');
+        try {
+            await database_1.default.$connect();
+            logger_1.logger.info('✅ Supabase PostgreSQL connected');
+        }
+        catch (dbErr) {
+            logger_1.logger.warn('⚠️  Could not connect to Supabase PostgreSQL: ' + (dbErr?.message || dbErr));
+            logger_1.logger.warn('👉 Please update DATABASE_URL & DIRECT_URL in backend/.env with your Supabase credentials.');
+            logger_1.logger.warn('   Once updated, run: npm run db:push && npm run db:seed');
+        }
         const server = app_1.default.listen(PORT, () => {
             logger_1.logger.info(`🎬 JoJo Cinema API running on port ${PORT}`);
             logger_1.logger.info(`   Environment: ${env_1.env.NODE_ENV}`);
             logger_1.logger.info(`   Demo mode: ${env_1.env.DEMO_MODE}`);
-            logger_1.logger.info(`   API docs: http://localhost:${PORT}/api`);
+            logger_1.logger.info(`   API docs & endpoints: http://localhost:${PORT}/api`);
         });
         // Graceful shutdown
         const shutdown = async (signal) => {

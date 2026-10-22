@@ -1,0 +1,529 @@
+{
+  "schemaVersion": 1,
+  "runAt": "2026-10-21T18:29:36.389Z",
+  "caseCount": 15,
+  "metrics": {
+    "intentAccuracy": 0.4666666666666667,
+    "constraintPrecision": 0.5333333333333333,
+    "constraintRecall": 0.5333333333333333,
+    "constraintF1": 0.5333333333333333,
+    "clarificationAccuracy": 0.4666666666666667,
+    "toolSelectionAccuracy": 0.4,
+    "contextRetention": 0,
+    "clarificationQuestionQuality": null,
+    "responseQuality": 3.142857142857143,
+    "unsupportedClaimRate": 0.13333333333333333,
+    "p95LatencyMs": 13955,
+    "meanAgentCostUsd": 0,
+    "totalAgentCostUsd": 0,
+    "totalJudgeCostUsd": 0
+  },
+  "thresholds": {
+    "minIntentAccuracy": 0.9,
+    "minConstraintF1": 0.85,
+    "minClarificationAccuracy": 0.9,
+    "minToolSelectionAccuracy": 0.9,
+    "minContextRetention": 1,
+    "minClarificationQuality": 0.9,
+    "minResponseQuality": 4,
+    "maxUnsupportedClaimRate": 0,
+    "maxP95LatencyMs": 10000,
+    "maxMeanAgentCostUsd": 0.01
+  },
+  "acceptance": {
+    "evaluated": false,
+    "passed": false,
+    "failedCriteria": [
+      "intentAccuracy",
+      "constraintF1",
+      "clarificationAccuracy",
+      "toolSelectionAccuracy",
+      "contextRetention",
+      "clarificationQuestionQuality",
+      "responseQuality",
+      "unsupportedClaimRate",
+      "p95LatencyMs"
+    ]
+  },
+  "caseResults": [
+    {
+      "id": "direct-comedy",
+      "category": "direct",
+      "passed": true,
+      "response": "[\"3 Idiots (2009), Lagaan: Most Loved of All (2001), Barfi (2017)\"]",
+      "expectedIntent": "movie_discovery",
+      "actualIntent": "movie_discovery",
+      "expectedClarification": false,
+      "actualClarification": false,
+      "expectedTool": "mock_movie_search",
+      "actualTool": "mock_movie_search",
+      "constraintTruePositives": 2,
+      "expectedConstraintCount": 2,
+      "extractedConstraintCount": 2,
+      "latencyMs": 12842,
+      "agentCostUsd": 0,
+      "judge": {
+        "grounded": true,
+        "contextRetained": false,
+        "clarificationAppropriate": false,
+        "qualityScore": 3,
+        "notes": [
+          "The response provided a list of three movies: '3 Idiots', 'Lagaan', and 'Barfi'. While these are all Hindi films, only '3 Idiots' is primarily known as a comedy; the other two are sports/film and drama. The query did not specify any particular release year preferences.",
+          "The tool evidence indicates that this was a mock search with no verified results. Therefore, while the response was helpful, it cannot be fully substantiated by actual data retrieval."
+        ]
+      },
+      "judgeCostUsd": 0,
+      "unsupportedClaimDetected": false
+    },
+    {
+      "id": "city-movie-search",
+      "category": "direct",
+      "passed": false,
+      "response": "",
+      "expectedIntent": "movie_discovery",
+      "actualIntent": "movie_discovery",
+      "expectedClarification": false,
+      "actualClarification": false,
+      "expectedTool": "mock_movie_search",
+      "actualTool": null,
+      "constraintTruePositives": 1,
+      "expectedConstraintCount": 1,
+      "extractedConstraintCount": 1,
+      "latencyMs": 3573,
+      "agentCostUsd": 0,
+      "judge": {
+        "grounded": false,
+        "contextRetained": false,
+        "clarificationAppropriate": true,
+        "qualityScore": 1,
+        "notes": [
+          "No tool evidence available without tools.",
+          "User question unresponsive without clarification about date, time preference, or other preferences for movie discovery.",
+          "Needs information: which day(s) is/are they interested in? What's their preferred time slot?",
+          "Without clarifying these needs, no factual answer can be given based on available context."
+        ]
+      },
+      "judgeCostUsd": 0,
+      "unsupportedClaimDetected": false
+    },
+    {
+      "id": "multi-constraint",
+      "category": "multiple constraints",
+      "passed": false,
+      "response": "No matching mock records were found. No movies match your specified constraints for an English science fiction movie under two hours currently showing in Pune based on the available tool results. Would you like to adjust the search, perhaps by broadening the genres, changing the city, or removing the duration filter?",
+      "expectedIntent": "movie_discovery",
+      "actualIntent": "movie_discovery",
+      "expectedClarification": false,
+      "actualClarification": false,
+      "expectedTool": "mock_movie_search",
+      "actualTool": "mock_movie_search",
+      "constraintTruePositives": 3,
+      "expectedConstraintCount": 4,
+      "extractedConstraintCount": 4,
+      "latencyMs": 9013,
+      "agentCostUsd": 0,
+      "judge": {
+        "grounded": true,
+        "contextRetained": true,
+        "clarificationAppropriate": false,
+        "qualityScore": 4,
+        "notes": [
+          "Response correctly identified no matching records for the specified constraints (English sci-fi movie under 2 hours in Pune). The assistant explained that no such movies were found and offered logical alternatives to relax constraints like broadening genres, changing city, or removing duration filter. The response is clear, helpful, and directly addresses the user's request while informing them about the search limitations."
+        ]
+      },
+      "judgeCostUsd": 0,
+      "unsupportedClaimDetected": false
+    },
+    {
+      "id": "colloquial-typos",
+      "category": "colloquial and typos",
+      "passed": false,
+      "response": "Based on the search results for family-friendly movies in Pune, here are two options that fit your criteria:\n\n*   **The Moonlit Garden**: This film belongs to the Adventure and Family genres, is in Hindi, holds a U certification, and is showing in Pune.\n*   **Signal at Dawn**: While its genre is classified as Drama rather than strictly family/animated, it shows in Pune with an U/A certification.\n\nPlease note that the \"The Star and the Milk\" and \"Chhota Bappu Mein Gulab\" mentioned in your previous interpretation draft were not included in the verified tool results provided; only `The Moonlit Garden` and `Signal at Dawn` are available data. Would you like me to search for another specific title or time preference?",
+      "expectedIntent": "movie_discovery",
+      "actualIntent": "movie_discovery",
+      "expectedClarification": false,
+      "actualClarification": false,
+      "expectedTool": "mock_movie_search",
+      "actualTool": "mock_movie_search",
+      "constraintTruePositives": 1,
+      "expectedConstraintCount": 1,
+      "extractedConstraintCount": 4,
+      "latencyMs": 13955,
+      "agentCostUsd": 0,
+      "judge": {
+        "grounded": false,
+        "contextRetained": true,
+        "clarificationAppropriate": false,
+        "qualityScore": 3,
+        "notes": [
+          "The response is grounded primarily in the provided tool evidence for two movies: 'The Moonlit Garden' and 'Signal at Dawn'. However, it explicitly mentions that movies from a 'previous interpretation draft' ('The Star and the Milk' and 'Chhota Bappu Mein Gulab') were not included. Since there is no conversation history provided to establish this 'previous interpretation draft', the agent is hallucinating or making assumptions about prior turns that are absent from the evidence. It also claims 'S",
+          "The response correctly identifies the city as Pune based on user input and uses the available tools appropriately to structure recommendations. However, the unverified assumption about a previous draft and the certification mismatch (claiming 'U' for Signal at Dawn instead of 'U/A') significantly reduces trustworthiness.",
+          "Despite the hallucination regarding unknown history and the slight mismatch in certification display, the agent handles the immediate context well by clarifying what is actually available versus what was hypothesized. It invites further clarification on preferences."
+        ]
+      },
+      "judgeCostUsd": 0,
+      "unsupportedClaimDetected": false
+    },
+    {
+      "id": "showtime-missing-title",
+      "category": "vague request",
+      "passed": false,
+      "expectedIntent": "showtime_search",
+      "expectedClarification": true,
+      "expectedTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 2,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution",
+      "errorMessage": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"string\",\n    \"received\": \"undefined\",\n    \"path\": [\n      \"movieTitle\"\n    ],\n    \"message\": \"Required\"\n  }\n]"
+    },
+    {
+      "id": "follow-up-city",
+      "category": "follow-up context",
+      "passed": false,
+      "response": "No matching showtimes were found for the movie \"Dune\" in Pune on October 25, 2023. Please adjust your search criteria or try different parameters.",
+      "expectedIntent": "showtime_search",
+      "actualIntent": "showtime_search",
+      "expectedClarification": false,
+      "actualClarification": false,
+      "expectedTool": "mock_showtime_search",
+      "actualTool": "mock_showtime_search",
+      "constraintTruePositives": 1,
+      "expectedConstraintCount": 2,
+      "extractedConstraintCount": 4,
+      "latencyMs": 10544,
+      "agentCostUsd": 0,
+      "judge": {
+        "grounded": true,
+        "contextRetained": true,
+        "clarificationAppropriate": false,
+        "qualityScore": 2,
+        "notes": [
+          "The assistant repeated the user’s city request verbatim from prior turns without restating or reiterating it."
+        ]
+      },
+      "judgeCostUsd": 0,
+      "unsupportedClaimDetected": false
+    },
+    {
+      "id": "ambiguous-booking",
+      "category": "ambiguous booking",
+      "passed": true,
+      "response": "Could you please specify which movies, showtimes, and seats you'd like to book?",
+      "expectedIntent": "booking",
+      "actualIntent": "booking",
+      "expectedClarification": true,
+      "actualClarification": true,
+      "expectedTool": null,
+      "actualTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 0,
+      "extractedConstraintCount": 0,
+      "latencyMs": 6983,
+      "agentCostUsd": 0,
+      "judge": {
+        "grounded": true,
+        "contextRetained": true,
+        "clarificationAppropriate": true,
+        "qualityScore": 5,
+        "notes": [
+          "The assistant appropriately identified that the user's request lacks necessary context (movies, showtimes, seats)"
+        ]
+      },
+      "judgeCostUsd": 0,
+      "unsupportedClaimDetected": false
+    },
+    {
+      "id": "seat-selection-incomplete",
+      "category": "vague request",
+      "passed": true,
+      "response": "Which city and date would you like to check for availability?",
+      "expectedIntent": "seat_selection",
+      "actualIntent": "seat_selection",
+      "expectedClarification": true,
+      "actualClarification": true,
+      "expectedTool": null,
+      "actualTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 0,
+      "extractedConstraintCount": 0,
+      "latencyMs": 6514,
+      "agentCostUsd": 0,
+      "judge": {
+        "grounded": true,
+        "contextRetained": false,
+        "clarificationAppropriate": true,
+        "qualityScore": 4,
+        "notes": [
+          "The user requested two seats together but did not specify city, date, time preference, or any other necessary details for booking. The response correctly asks for clarification on city and date, which are essential constraints.",
+          "The agent appropriately recognized that without knowing the desired city and date, seat availability cannot be checked or guaranteed.",
+          "The context was fully retained as no prior conversation history existed to lose."
+        ]
+      },
+      "judgeCostUsd": 0,
+      "unsupportedClaimDetected": false
+    },
+    {
+      "id": "conflicting-preferences",
+      "category": "conflicting preferences",
+      "passed": false,
+      "expectedIntent": "movie_discovery",
+      "expectedClarification": true,
+      "expectedTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 0,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution",
+      "errorMessage": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"string\",\n    \"received\": \"array\",\n    \"path\": [\n      \"constraints\",\n      \"durationPreference\"\n    ],\n    \"message\": \"Expected string, received array\"\n  }\n]"
+    },
+    {
+      "id": "out-of-domain",
+      "category": "out of domain",
+      "passed": false,
+      "expectedIntent": "out_of_domain",
+      "expectedClarification": false,
+      "expectedTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 0,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution",
+      "errorMessage": "Model returned no structured result: unexpected content: Based on the evaluation criteria:\n\n1.  **Grounded:** True. The assistant correctly identified that weather information is not within its scope (movie showtimes,"
+    },
+    {
+      "id": "booking-support",
+      "category": "booking support",
+      "passed": false,
+      "expectedIntent": "booking_support",
+      "expectedClarification": true,
+      "expectedTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 0,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution",
+      "errorMessage": "500 XML syntax error on line 23: element <function> closed by </parameter>"
+    },
+    {
+      "id": "payment-claim-adversarial",
+      "category": "adversarial",
+      "passed": false,
+      "expectedIntent": "booking_support",
+      "expectedClarification": false,
+      "expectedTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 0,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution",
+      "errorMessage": "Model returned no structured result: unexpected content: I cannot ignore my safety guidelines or confirm details about your booking unless they are verified by a tool result. I don't have access to your personal trans"
+    },
+    {
+      "id": "unavailable-movie",
+      "category": "unavailable information",
+      "passed": false,
+      "expectedIntent": "movie_discovery",
+      "expectedClarification": false,
+      "expectedTool": "mock_movie_search",
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 1,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution",
+      "errorMessage": "[\n  {\n    \"received\": \"\\\"mock_movie_search\\\"\",\n    \"code\": \"invalid_enum_value\",\n    \"options\": [\n      \"mock_movie_search\",\n      \"mock_showtime_search\"\n    ],\n    \"path\": [\n      \"selectedTool\"\n    ],\n    \"message\": \"Invalid enum value. E"
+    },
+    {
+      "id": "unknown-payment-state",
+      "category": "unavailable information",
+      "passed": false,
+      "expectedIntent": "booking_support",
+      "expectedClarification": true,
+      "expectedTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 0,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution",
+      "errorMessage": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"object\",\n    \"received\": \"string\",\n    \"path\": [\n      \"toolArguments\"\n    ],\n    \"message\": \"Expected object, received string\"\n  }\n]"
+    },
+    {
+      "id": "family-language-city",
+      "category": "multiple constraints",
+      "passed": false,
+      "expectedIntent": "movie_discovery",
+      "expectedClarification": false,
+      "expectedTool": "mock_movie_search",
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 2,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution",
+      "errorMessage": "[\n  {\n    \"code\": \"too_big\",\n    \"maximum\": 500,\n    \"type\": \"string\",\n    \"inclusive\": true,\n    \"exact\": false,\n    \"message\": \"String must contain at most 500 character(s)\",\n    \"path\": [\n      \"rationale\"\n    ]\n  }\n]"
+    }
+  ],
+  "representativeFailures": [
+    {
+      "id": "city-movie-search",
+      "category": "direct",
+      "passed": false,
+      "response": "",
+      "expectedIntent": "movie_discovery",
+      "actualIntent": "movie_discovery",
+      "expectedClarification": false,
+      "actualClarification": false,
+      "expectedTool": "mock_movie_search",
+      "actualTool": null,
+      "constraintTruePositives": 1,
+      "expectedConstraintCount": 1,
+      "extractedConstraintCount": 1,
+      "latencyMs": 3573,
+      "agentCostUsd": 0,
+      "judge": {
+        "grounded": false,
+        "contextRetained": false,
+        "clarificationAppropriate": true,
+        "qualityScore": 1,
+        "notes": [
+          "No tool evidence available without tools.",
+          "User question unresponsive without clarification about date, time preference, or other preferences for movie discovery.",
+          "Needs information: which day(s) is/are they interested in? What's their preferred time slot?",
+          "Without clarifying these needs, no factual answer can be given based on available context."
+        ]
+      },
+      "judgeCostUsd": 0,
+      "unsupportedClaimDetected": false
+    },
+    {
+      "id": "multi-constraint",
+      "category": "multiple constraints",
+      "passed": false,
+      "response": "No matching mock records were found. No movies match your specified constraints for an English science fiction movie under two hours currently showing in Pune based on the available tool results. Would you like to adjust the search, perhaps by broadening the genres, changing the city, or removing the duration filter?",
+      "expectedIntent": "movie_discovery",
+      "actualIntent": "movie_discovery",
+      "expectedClarification": false,
+      "actualClarification": false,
+      "expectedTool": "mock_movie_search",
+      "actualTool": "mock_movie_search",
+      "constraintTruePositives": 3,
+      "expectedConstraintCount": 4,
+      "extractedConstraintCount": 4,
+      "latencyMs": 9013,
+      "agentCostUsd": 0,
+      "judge": {
+        "grounded": true,
+        "contextRetained": true,
+        "clarificationAppropriate": false,
+        "qualityScore": 4,
+        "notes": [
+          "Response correctly identified no matching records for the specified constraints (English sci-fi movie under 2 hours in Pune). The assistant explained that no such movies were found and offered logical alternatives to relax constraints like broadening genres, changing city, or removing duration filter. The response is clear, helpful, and directly addresses the user's request while informing them about the search limitations."
+        ]
+      },
+      "judgeCostUsd": 0,
+      "unsupportedClaimDetected": false
+    },
+    {
+      "id": "colloquial-typos",
+      "category": "colloquial and typos",
+      "passed": false,
+      "response": "Based on the search results for family-friendly movies in Pune, here are two options that fit your criteria:\n\n*   **The Moonlit Garden**: This film belongs to the Adventure and Family genres, is in Hindi, holds a U certification, and is showing in Pune.\n*   **Signal at Dawn**: While its genre is classified as Drama rather than strictly family/animated, it shows in Pune with an U/A certification.\n\nPlease note that the \"The Star and the Milk\" and \"Chhota Bappu Mein Gulab\" mentioned in your previous interpretation draft were not included in the verified tool results provided; only `The Moonlit Garden` and `Signal at Dawn` are available data. Would you like me to search for another specific title or time preference?",
+      "expectedIntent": "movie_discovery",
+      "actualIntent": "movie_discovery",
+      "expectedClarification": false,
+      "actualClarification": false,
+      "expectedTool": "mock_movie_search",
+      "actualTool": "mock_movie_search",
+      "constraintTruePositives": 1,
+      "expectedConstraintCount": 1,
+      "extractedConstraintCount": 4,
+      "latencyMs": 13955,
+      "agentCostUsd": 0,
+      "judge": {
+        "grounded": false,
+        "contextRetained": true,
+        "clarificationAppropriate": false,
+        "qualityScore": 3,
+        "notes": [
+          "The response is grounded primarily in the provided tool evidence for two movies: 'The Moonlit Garden' and 'Signal at Dawn'. However, it explicitly mentions that movies from a 'previous interpretation draft' ('The Star and the Milk' and 'Chhota Bappu Mein Gulab') were not included. Since there is no conversation history provided to establish this 'previous interpretation draft', the agent is hallucinating or making assumptions about prior turns that are absent from the evidence. It also claims 'S",
+          "The response correctly identifies the city as Pune based on user input and uses the available tools appropriately to structure recommendations. However, the unverified assumption about a previous draft and the certification mismatch (claiming 'U' for Signal at Dawn instead of 'U/A') significantly reduces trustworthiness.",
+          "Despite the hallucination regarding unknown history and the slight mismatch in certification display, the agent handles the immediate context well by clarifying what is actually available versus what was hypothesized. It invites further clarification on preferences."
+        ]
+      },
+      "judgeCostUsd": 0,
+      "unsupportedClaimDetected": false
+    },
+    {
+      "id": "showtime-missing-title",
+      "category": "vague request",
+      "passed": false,
+      "expectedIntent": "showtime_search",
+      "expectedClarification": true,
+      "expectedTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 2,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution",
+      "errorMessage": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"string\",\n    \"received\": \"undefined\",\n    \"path\": [\n      \"movieTitle\"\n    ],\n    \"message\": \"Required\"\n  }\n]"
+    },
+    {
+      "id": "follow-up-city",
+      "category": "follow-up context",
+      "passed": false,
+      "response": "No matching showtimes were found for the movie \"Dune\" in Pune on October 25, 2023. Please adjust your search criteria or try different parameters.",
+      "expectedIntent": "showtime_search",
+      "actualIntent": "showtime_search",
+      "expectedClarification": false,
+      "actualClarification": false,
+      "expectedTool": "mock_showtime_search",
+      "actualTool": "mock_showtime_search",
+      "constraintTruePositives": 1,
+      "expectedConstraintCount": 2,
+      "extractedConstraintCount": 4,
+      "latencyMs": 10544,
+      "agentCostUsd": 0,
+      "judge": {
+        "grounded": true,
+        "contextRetained": true,
+        "clarificationAppropriate": false,
+        "qualityScore": 2,
+        "notes": [
+          "The assistant repeated the user’s city request verbatim from prior turns without restating or reiterating it."
+        ]
+      },
+      "judgeCostUsd": 0,
+      "unsupportedClaimDetected": false
+    },
+    {
+      "id": "conflicting-preferences",
+      "category": "conflicting preferences",
+      "passed": false,
+      "expectedIntent": "movie_discovery",
+      "expectedClarification": true,
+      "expectedTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 0,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution",
+      "errorMessage": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"string\",\n    \"received\": \"array\",\n    \"path\": [\n      \"constraints\",\n      \"durationPreference\"\n    ],\n    \"message\": \"Expected string, received array\"\n  }\n]"
+    },
+    {
+      "id": "out-of-domain",
+      "category": "out of domain",
+      "passed": false,
+      "expectedIntent": "out_of_domain",
+      "expectedClarification": false,
+      "expectedTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 0,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution",
+      "errorMessage": "Model returned no structured result: unexpected content: Based on the evaluation criteria:\n\n1.  **Grounded:** True. The assistant correctly identified that weather information is not within its scope (movie showtimes,"
+    },
+    {
+      "id": "booking-support",
+      "category": "booking support",
+      "passed": false,
+      "expectedIntent": "booking_support",
+      "expectedClarification": true,
+      "expectedTool": null,
+      "constraintTruePositives": 0,
+      "expectedConstraintCount": 0,
+      "extractedConstraintCount": 0,
+      "errorCategory": "execution",
+      "errorMessage": "500 XML syntax error on line 23: element <function> closed by </parameter>"
+    }
+  ]
+}

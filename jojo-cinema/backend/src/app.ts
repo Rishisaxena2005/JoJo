@@ -15,6 +15,7 @@ import seatLocksRouter from './routes/seatLocks';
 import bookingsRouter from './routes/bookings';
 import paymentsRouter from './routes/payments';
 import ticketsRouter from './routes/tickets';
+import agentRouter from './routes/agent';
 
 const app = express();
 
@@ -65,6 +66,7 @@ app.use('/api/seat-locks', seatLocksRouter);
 app.use('/api/bookings', bookingsRouter);
 app.use('/api/payments', paymentsRouter);
 app.use('/api/tickets', ticketsRouter);
+app.use('/api/agent', agentRouter);
 
 // ─── API Info ────────────────────────────────────────────────────────────────
 app.get('/api', (_req, res) => {
@@ -92,6 +94,7 @@ app.get('/api', (_req, res) => {
       'POST /api/payments/:paymentId/simulate',
       'POST /api/payments/webhook',
       'GET  /api/tickets/:ticketReference/verify',
+      'POST /api/agent/chat',
     ],
   });
 });

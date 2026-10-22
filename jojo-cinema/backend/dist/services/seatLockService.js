@@ -47,22 +47,14 @@ async function lockSeats(input) {
             const missing = seatIds.filter(id => !foundIds.includes(id));
             throw new errorHandler_1.AppError(404, api_1.ErrorCodes.NOT_FOUND, `Seats not found: ${missing.join(', ')}`);
         }
-        // Verify all seats are AVAILABLE
-        const unavailable = showSeats.filter(s => s.status !== 'AVAILABLE');
-        if (unavailable.length > 0) {
-            throw new errorHandler_1.AppError(409, api_1.ErrorCodes.SEAT_UNAVAILABLE, 'One or more selected seats are no longer available', {
-                unavailableSeats: unavailable.map(s => ({
-                    showSeatId: s.id,
-                    seatLabel: s.seat.seatLabel,
-                    status: s.status,
-                })),
-            });
-        }
-        // Mark seats as LOCKED
-        await tx.showSeat.updateMany({
-            where: { id: { in: seatIds } },
+        // Atomically mark seats as LOCKED only if they are currently AVAILABLE
+        const updateResult = await tx.showSeat.updateMany({
+            where: { id: { in: seatIds }, showId, status: 'AVAILABLE' },
             data: { status: 'LOCKED' },
         });
+        if (updateResult.count !== seatIds.length) {
+            throw new errorHandler_1.AppError(409, api_1.ErrorCodes.SEAT_UNAVAILABLE, 'One or more selected seats are no longer available');
+        }
         // Create the SeatLock record
         const seatLock = await tx.seatLock.create({
             data: {
