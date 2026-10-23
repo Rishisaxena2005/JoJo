@@ -2,12 +2,14 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleTrainBookingMessage = handleTrainBookingMessage;
 const scheduleWindow_1 = require("../trains/scheduleWindow");
+const events_1 = require("../agent-runtime/events");
 const apiBase = process.env.JOJO_BOOKING_API_BASE_URL ?? 'http://localhost:4000/api';
 const DEMO_NOTICE = 'These are sample JoJo demo schedules and fares—not live railway inventory or an IRCTC booking.';
 async function api(path, init = {}) {
+    const trace = (0, events_1.getAgentTraceContext)();
     const response = await fetch(`${apiBase}${path}`, {
         ...init,
-        headers: { 'content-type': 'application/json', ...(init.headers ?? {}) },
+        headers: { 'content-type': 'application/json', ...(trace ? { 'x-jojo-run-id': trace.runId } : {}), ...(init.headers ?? {}) },
     });
     const envelope = await response.json();
     if (!response.ok || !envelope.success || envelope.data === undefined) {

@@ -60,7 +60,7 @@ export declare const agentResultSchema: z.ZodObject<{
     /** Verified tool payloads used for the answer; excluded from event logs. */
     groundingEvidence: z.ZodOptional<z.ZodArray<z.ZodUnknown, "many">>;
 }, "strip", z.ZodTypeAny, {
-    status: "completed" | "failed" | "waiting";
+    status: "waiting" | "completed" | "failed";
     response: string;
     toolCalls: string[];
     usage: {
@@ -71,7 +71,7 @@ export declare const agentResultSchema: z.ZodObject<{
     decision?: Record<string, unknown> | undefined;
     groundingEvidence?: unknown[] | undefined;
 }, {
-    status: "completed" | "failed" | "waiting";
+    status: "waiting" | "completed" | "failed";
     response: string;
     usage: {
         inputTokens: number;

@@ -9,6 +9,7 @@ const bookingFlow_1 = require("./bookingFlow");
 const presentation_1 = require("./presentation");
 const conversationState_1 = require("./conversationState");
 const trainBookingFlow_1 = require("./trainBookingFlow");
+const events_1 = require("../agent-runtime/events");
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token)
     throw new Error('Set TELEGRAM_BOT_TOKEN in backend/.env before starting the Telegram polling bot.');
@@ -48,6 +49,18 @@ async function telegramWithPhoto(method, fields, png) {
 function replyMarkup(reply) {
     return JSON.stringify({ inline_keyboard: reply.inlineKeyboard ?? [] });
 }
+async function publishTraceEvent(event) {
+    try {
+        await fetch(`${cinemaApi}/agent/trace-event`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(event),
+        });
+    }
+    catch {
+        // Telemetry is best-effort; trace collection must never block a customer reply.
+    }
+}
 async function handleMessage(update) {
     const message = update.message;
     const text = message?.text?.trim();
@@ -55,13 +68,22 @@ async function handleMessage(update) {
         return;
     const chatId = String(message.chat.id);
     const userId = String(message.from?.id ?? chatId);
+    const runId = (0, events_1.newRunId)();
+    const conversationId = `telegram-${chatId}-${userId}`;
     try {
         const conversation = await (0, conversationState_1.loadTelegramConversation)(chatId, userId, update.update_id);
         if (conversation.duplicate)
             return;
+        await publishTraceEvent({ runId, eventType: 'channel.received' });
         const history = conversation.history;
         const state = conversation.state;
-        const trainResult = await (0, trainBookingFlow_1.handleTrainBookingMessage)(chatId, userId, text, state);
+        const trainCandidate = Boolean(state.trainTask) || /\b(?:train|railway|rail)\b/i.test(text);
+        const trainFlowStartedAt = Date.now();
+        if (trainCandidate)
+            await publishTraceEvent({ runId, eventType: 'workflow.started', workflow: 'train' });
+        const trainResult = await (0, events_1.withAgentTraceContext)({ runId, conversationId }, () => (0, trainBookingFlow_1.handleTrainBookingMessage)(chatId, userId, text, state));
+        if (trainCandidate)
+            await publishTraceEvent({ runId, eventType: 'workflow.completed', workflow: 'train', durationMs: Date.now() - trainFlowStartedAt });
         if (trainResult.handled) {
             const reply = trainResult.reply ?? 'I’m here to help with your train search.';
             history.push({ role: 'user', content: text }, { role: 'assistant', content: reply });
@@ -76,6 +98,7 @@ async function handleMessage(update) {
                 }
                 : { remove_keyboard: true };
             await telegram('sendMessage', { chat_id: chatId, text: formatted.text.slice(0, 4000), parse_mode: 'HTML', reply_markup: replyMarkup });
+            await publishTraceEvent({ runId, eventType: 'channel.replied' });
             return;
         }
         // The user may explicitly switch from an in-progress train flow to cinema.
@@ -83,8 +106,15 @@ async function handleMessage(update) {
         if (state.trainTask && !activeState.trainTask) {
             await telegram('sendMessage', { chat_id: chatId, text: 'Okay—switching to movie and cinema help.', reply_markup: { remove_keyboard: true } });
         }
-        const bookingReply = await (0, bookingFlow_1.handleBookingMessage)(chatId, text, history);
+        const movieBookingCandidate = /\b(?:book|booking|reserve|reservation|pay demo|cancel booking|same show|another ticket)\b/i.test(text)
+            || history.some(item => item.role === 'assistant' && /how many seats|choose a movie to see its cinemas|choose a cinema|confirm seats|pay demo/i.test(item.content));
+        const movieFlowStartedAt = Date.now();
+        if (movieBookingCandidate)
+            await publishTraceEvent({ runId, eventType: 'workflow.started', workflow: 'movie' });
+        const bookingReply = await (0, events_1.withAgentTraceContext)({ runId, conversationId }, () => (0, bookingFlow_1.handleBookingMessage)(chatId, text, history));
         if (bookingReply) {
+            if (movieBookingCandidate)
+                await publishTraceEvent({ runId, eventType: 'workflow.completed', workflow: 'movie', durationMs: Date.now() - movieFlowStartedAt });
             const replyText = bookingReplyText(bookingReply);
             history.push({ role: 'user', content: text }, { role: 'assistant', content: replyText });
             await (0, conversationState_1.saveTelegramConversation)({ chatId, userId, updateId: update.update_id, history: history.slice(-MAX_HISTORY), state: (0, conversationState_1.stateFromTurn)(activeState, text, replyText) });
@@ -109,12 +139,15 @@ async function handleMessage(update) {
                     ...(formatted.inlineKeyboard ? { reply_markup: { inline_keyboard: formatted.inlineKeyboard } } : {}),
                 });
             }
+            await publishTraceEvent({ runId, eventType: 'channel.replied' });
             return;
         }
+        if (movieBookingCandidate)
+            await publishTraceEvent({ runId, eventType: 'workflow.completed', workflow: 'movie', durationMs: Date.now() - movieFlowStartedAt });
         const response = await fetch(`${cinemaApi}/agent/chat`, {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ message: text, conversationId: `telegram-${chatId}-${userId}`, history, conversationState: activeState }),
+            headers: { 'content-type': 'application/json', 'x-jojo-run-id': runId },
+            body: JSON.stringify({ message: text, conversationId, history, conversationState: activeState }),
         });
         const envelope = await response.json();
         if (!response.ok || !envelope.success || !envelope.data?.reply) {
@@ -136,8 +169,10 @@ async function handleMessage(update) {
             parse_mode: 'HTML',
             ...(formatted.inlineKeyboard ? { reply_markup: { inline_keyboard: formatted.inlineKeyboard } } : {}),
         });
+        await publishTraceEvent({ runId, eventType: 'channel.replied' });
     }
     catch (error) {
+        await publishTraceEvent({ runId, eventType: 'channel.failed' });
         console.error('Could not handle Telegram message:', error instanceof Error ? error.message : 'unknown error');
         await telegram('sendMessage', {
             chat_id: chatId,
@@ -149,95 +184,109 @@ async function handleCallback(update) {
     const callback = update.callback_query;
     if (!callback)
         return;
+    const runId = (0, events_1.newRunId)();
     await telegram('answerCallbackQuery', { callback_query_id: callback.id });
     if (!callback.message)
         return;
     const chatId = String(callback.message.chat.id);
-    if (callback.data?.startsWith('city|')) {
-        const city = decodeURIComponent(callback.data.slice('city|'.length));
-        const userId = String(callback.from?.id ?? chatId);
-        const conversation = await (0, conversationState_1.loadTelegramConversation)(chatId, userId, update.update_id);
-        if (conversation.duplicate)
-            return;
-        const history = conversation.history;
-        const response = await fetch(`${cinemaApi}/agent/chat`, {
-            method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ message: `Which cinemas are in ${city}?`, conversationId: `telegram-${chatId}-${userId}`, history, conversationState: conversation.state }),
-        });
-        const envelope = await response.json();
-        const formatted = (0, presentation_1.formatTelegramReply)(envelope.data?.reply ?? 'I couldn’t load that city right now.', envelope.data?.presentation);
-        const replyText = envelope.data?.reply ?? 'I couldn’t load that city right now.';
-        history.push({ role: 'user', content: `Which cinemas are in ${city}?` }, { role: 'assistant', content: replyText });
-        await (0, conversationState_1.saveTelegramConversation)({ chatId, userId, updateId: update.update_id, history, state: (0, conversationState_1.stateFromTurn)(conversation.state, city, replyText) });
-        await telegram('editMessageText', {
-            chat_id: chatId, message_id: callback.message.message_id,
-            text: formatted.text.slice(0, 4000), parse_mode: 'HTML',
-            ...(formatted.inlineKeyboard ? { reply_markup: { inline_keyboard: formatted.inlineKeyboard } } : { reply_markup: { inline_keyboard: [] } }),
-        });
-        return;
-    }
-    const reply = await (0, bookingFlow_1.handleBookingCallback)(chatId, callback.data ?? '');
-    if (!reply)
-        return;
-    const text = bookingReplyText(reply).slice(0, 4000);
-    if (typeof reply !== 'string' && reply.photoSvg) {
-        const png = await (0, sharp_1.default)(Buffer.from(reply.photoSvg)).png().toBuffer();
-        const formatted = (0, presentation_1.formatTelegramReply)(text);
-        if (callback.message.caption) {
-            await telegramWithPhoto('editMessageMedia', {
-                chat_id: chatId,
-                message_id: String(callback.message.message_id),
-                media: JSON.stringify({ type: 'photo', media: 'attach://photo', caption: formatted.text.slice(0, 1024), parse_mode: 'HTML' }),
-                reply_markup: replyMarkup(reply),
-            }, png);
-        }
-        else {
-            await telegramWithPhoto('sendPhoto', {
-                chat_id: chatId,
-                caption: formatted.text.slice(0, 1024),
-                parse_mode: 'HTML',
-                reply_markup: replyMarkup(reply),
-            }, png);
-            await telegram('editMessageReplyMarkup', {
+    const userId = String(callback.from?.id ?? chatId);
+    const conversationId = `telegram-${chatId}-${userId}`;
+    await publishTraceEvent({ runId, eventType: 'channel.received' });
+    try {
+        if (callback.data?.startsWith('city|')) {
+            const city = decodeURIComponent(callback.data.slice('city|'.length));
+            const conversation = await (0, conversationState_1.loadTelegramConversation)(chatId, userId, update.update_id);
+            if (conversation.duplicate)
+                return;
+            const history = conversation.history;
+            const response = await fetch(`${cinemaApi}/agent/chat`, {
+                method: 'POST', headers: { 'content-type': 'application/json', 'x-jojo-run-id': runId },
+                body: JSON.stringify({ message: `Which cinemas are in ${city}?`, conversationId, history, conversationState: conversation.state }),
+            });
+            const envelope = await response.json();
+            const formatted = (0, presentation_1.formatTelegramReply)(envelope.data?.reply ?? 'I couldn’t load that city right now.', envelope.data?.presentation);
+            const replyText = envelope.data?.reply ?? 'I couldn’t load that city right now.';
+            history.push({ role: 'user', content: `Which cinemas are in ${city}?` }, { role: 'assistant', content: replyText });
+            await (0, conversationState_1.saveTelegramConversation)({ chatId, userId, updateId: update.update_id, history, state: (0, conversationState_1.stateFromTurn)(conversation.state, city, replyText) });
+            await telegram('editMessageText', {
                 chat_id: chatId, message_id: callback.message.message_id,
-                reply_markup: { inline_keyboard: [] },
+                text: formatted.text.slice(0, 4000), parse_mode: 'HTML',
+                ...(formatted.inlineKeyboard ? { reply_markup: { inline_keyboard: formatted.inlineKeyboard } } : { reply_markup: { inline_keyboard: [] } }),
+            });
+            await publishTraceEvent({ runId, eventType: 'channel.replied' });
+            return;
+        }
+        await publishTraceEvent({ runId, eventType: 'workflow.started', workflow: 'movie' });
+        const reply = await (0, events_1.withAgentTraceContext)({ runId, conversationId }, () => (0, bookingFlow_1.handleBookingCallback)(chatId, callback.data ?? ''));
+        if (!reply) {
+            await publishTraceEvent({ runId, eventType: 'workflow.completed', workflow: 'movie' });
+            return;
+        }
+        await publishTraceEvent({ runId, eventType: 'workflow.completed', workflow: 'movie' });
+        const text = bookingReplyText(reply).slice(0, 4000);
+        if (typeof reply !== 'string' && reply.photoSvg) {
+            const png = await (0, sharp_1.default)(Buffer.from(reply.photoSvg)).png().toBuffer();
+            const formatted = (0, presentation_1.formatTelegramReply)(text);
+            if (callback.message.caption) {
+                await telegramWithPhoto('editMessageMedia', {
+                    chat_id: chatId,
+                    message_id: String(callback.message.message_id),
+                    media: JSON.stringify({ type: 'photo', media: 'attach://photo', caption: formatted.text.slice(0, 1024), parse_mode: 'HTML' }),
+                    reply_markup: replyMarkup(reply),
+                }, png);
+            }
+            else {
+                await telegramWithPhoto('sendPhoto', {
+                    chat_id: chatId,
+                    caption: formatted.text.slice(0, 1024),
+                    parse_mode: 'HTML',
+                    reply_markup: replyMarkup(reply),
+                }, png);
+                await telegram('editMessageReplyMarkup', {
+                    chat_id: chatId, message_id: callback.message.message_id,
+                    reply_markup: { inline_keyboard: [] },
+                });
+            }
+        }
+        else if (typeof reply === 'string' && callback.message.caption) {
+            await telegram('editMessageCaption', {
+                chat_id: chatId, message_id: callback.message.message_id,
+                caption: text.slice(0, 1024), reply_markup: { inline_keyboard: [] },
             });
         }
+        else if (typeof reply === 'string') {
+            const formatted = (0, presentation_1.formatTelegramReply)(reply);
+            await telegram('editMessageText', {
+                chat_id: chatId, message_id: callback.message.message_id,
+                text: formatted.text.slice(0, 4000), parse_mode: 'HTML', reply_markup: { inline_keyboard: [] },
+            });
+        }
+        else if (!callback.message.caption) {
+            await telegram('editMessageText', {
+                chat_id: chatId, message_id: callback.message.message_id,
+                text: text.slice(0, 4000), parse_mode: 'HTML',
+                reply_markup: { inline_keyboard: reply.inlineKeyboard ?? [] },
+            });
+        }
+        else {
+            await telegram('editMessageCaption', {
+                chat_id: chatId,
+                message_id: callback.message.message_id,
+                caption: text.slice(0, 1024), parse_mode: 'HTML',
+                reply_markup: { inline_keyboard: reply.inlineKeyboard ?? [] },
+            });
+        }
+        if (typeof reply === 'string') {
+            const conversation = await (0, conversationState_1.loadTelegramConversation)(chatId, userId, update.update_id);
+            const history = conversation.history;
+            history.push({ role: 'assistant', content: reply });
+            await (0, conversationState_1.saveTelegramConversation)({ chatId, userId, updateId: update.update_id, history: history.slice(-MAX_HISTORY), state: (0, conversationState_1.stateFromTurn)(conversation.state, '', reply) });
+        }
+        await publishTraceEvent({ runId, eventType: 'channel.replied' });
     }
-    else if (typeof reply === 'string' && callback.message.caption) {
-        await telegram('editMessageCaption', {
-            chat_id: chatId, message_id: callback.message.message_id,
-            caption: text.slice(0, 1024), reply_markup: { inline_keyboard: [] },
-        });
-    }
-    else if (typeof reply === 'string') {
-        const formatted = (0, presentation_1.formatTelegramReply)(reply);
-        await telegram('editMessageText', {
-            chat_id: chatId, message_id: callback.message.message_id,
-            text: formatted.text.slice(0, 4000), parse_mode: 'HTML', reply_markup: { inline_keyboard: [] },
-        });
-    }
-    else if (!callback.message.caption) {
-        await telegram('editMessageText', {
-            chat_id: chatId, message_id: callback.message.message_id,
-            text: text.slice(0, 4000), parse_mode: 'HTML',
-            reply_markup: { inline_keyboard: reply.inlineKeyboard ?? [] },
-        });
-    }
-    else {
-        await telegram('editMessageCaption', {
-            chat_id: chatId,
-            message_id: callback.message.message_id,
-            caption: text.slice(0, 1024), parse_mode: 'HTML',
-            reply_markup: { inline_keyboard: reply.inlineKeyboard ?? [] },
-        });
-    }
-    if (typeof reply === 'string') {
-        const userId = String(callback.from?.id ?? chatId);
-        const conversation = await (0, conversationState_1.loadTelegramConversation)(chatId, userId, update.update_id);
-        const history = conversation.history;
-        history.push({ role: 'assistant', content: reply });
-        await (0, conversationState_1.saveTelegramConversation)({ chatId, userId, updateId: update.update_id, history: history.slice(-MAX_HISTORY), state: (0, conversationState_1.stateFromTurn)(conversation.state, '', reply) });
+    catch (error) {
+        await publishTraceEvent({ runId, eventType: 'channel.failed' });
+        throw error;
     }
 }
 async function main() {

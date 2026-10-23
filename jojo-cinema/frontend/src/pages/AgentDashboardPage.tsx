@@ -11,6 +11,8 @@ type AgentEvent = {
   runId: string;
   agentId: string;
   agentName: string;
+  from?: string;
+  to?: string;
   eventType: string;
   timestamp: string;
   status: string;
@@ -135,6 +137,13 @@ const topology = [
     description: 'Telegram/web reply · booking and ticket references', tint: 'pink',
     matches: (e: AgentEvent) => e.eventType === 'channel.replied' || e.eventType === 'run.completed',
   },
+];
+
+const roleCards = [
+  { id: 'conversation', label: 'Conversation & Intent', tint: 'violet', active: (e: AgentEvent) => e.agentId === 'conversation-intent' || e.eventType.startsWith('agent.') },
+  { id: 'movie', label: 'Movie Booking', tint: 'cyan', active: (e: AgentEvent) => e.agentId === 'movie-booking-flow' || (e.eventType.startsWith('workflow.') && e.summary?.toLowerCase().includes('movie')) },
+  { id: 'train', label: 'Train Booking', tint: 'amber', active: (e: AgentEvent) => e.agentId === 'train-booking-flow' || (e.eventType.startsWith('workflow.') && e.summary?.toLowerCase().includes('train')) },
+  { id: 'booking', label: 'Booking & Payment', tint: 'emerald', active: (e: AgentEvent) => e.agentId === 'booking-payment' || /booking|payment|ticket/i.test(`${e.eventType} ${e.summary ?? ''}`) },
 ];
 
 export default function AgentDashboardPage() {
@@ -308,7 +317,7 @@ export default function AgentDashboardPage() {
             <Metric label="Calls in trace buffer" value={String(runs.length)} icon={Activity} detail="Retained live traces" />
             <Metric label="Successful turns" value={successRate === null ? '—' : `${successRate}%`} icon={BadgeCheck} detail={`${completedRuns} completed · ${failedRuns} failed`} />
             <Metric label="Avg. runtime" value={elapsed(averageLatency ?? undefined)} icon={Clock3} detail="Completed agent runs" />
-            <Metric label="Active AI agents" value="01" icon={Cpu} detail="Tools & workflows are not agents" />
+            <Metric label="Specialist agents / roles" value="04" icon={Cpu} detail="Conversation · Movie · Train · Booking" />
           </div>
         </div>
       </div>
@@ -320,17 +329,28 @@ export default function AgentDashboardPage() {
             <span className="rounded-full border border-cyan-300/20 bg-cyan-300/[0.06] px-3 py-1.5 font-mono text-[10px] text-cyan-200">{events.length} observed events</span>
           </div>
           <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-4 sm:p-7">
-            {(selectedRun ? runs.filter(run => run.id === selectedRun) : runs.slice(0, 1)).flatMap(run => run.trace).slice(-8).map((event, index, trace) => {
+            {(selectedRun ? runs.filter(run => run.id === selectedRun) : runs.slice(0, 1)).flatMap(run => run.trace).slice(-12).map((event, index, trace) => {
               const Icon = eventIcon(event);
               return <div key={eventKey(event)} className="relative min-h-[112px] rounded-2xl border border-white/10 bg-[#0b1220] p-4">
                 {index < trace.length - 1 && <ArrowRight className="absolute -right-3 top-1/2 z-10 hidden h-5 w-5 -translate-y-1/2 text-cyan-300 lg:block" />}
                 <div className="flex items-center justify-between"><span className="flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-300/10 text-cyan-200"><Icon className="h-4 w-4" /></span><span className="font-mono text-[9px] text-slate-500">{safeDate(event.timestamp)}</span></div>
                 <p className="mt-3 text-xs font-bold text-white">{titleFor(event)}</p><p className="mt-1 line-clamp-2 text-[10px] leading-4 text-slate-400">{event.summary || event.agentName}</p>
-                <p className="mt-2 truncate font-mono text-[9px] text-cyan-300/70">{event.agentName}{event.toolName ? ` → ${event.toolName}` : ''}</p>
+                <p className="mt-2 truncate font-mono text-[9px] text-cyan-300/70">{event.from && event.to ? `${event.from} → ${event.to}` : `${event.agentName}${event.toolName ? ` → ${event.toolName}` : ''}`}</p>
               </div>;
             })}
             {!events.length && <div className="col-span-full rounded-2xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-500">Waiting for a conversation. Send a request in the playground or message the Telegram bot; each observed hand-off will appear here.</div>}
           </div>
+        </section>
+        <section className="agent-panel rounded-3xl p-5 sm:p-7">
+          <div className="flex items-center justify-between gap-3"><div><Eyebrow>LIVE / Four system roles</Eyebrow><h2 className="mt-1 text-xl font-extrabold text-white">Request participants</h2></div><span className="font-mono text-xs text-cyan-200">04 ROLES</span></div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {roleCards.map(role => {
+              const event = [...(focusedRun?.trace ?? [])].reverse().find(role.active);
+              const active = Boolean(event && clock - Date.parse(event.timestamp) < 18_000);
+              return <div key={role.id} className={`agent-node agent-node-${role.tint} ${active ? 'is-hot' : ''}`}><div className="flex items-center justify-between"><span className="text-sm font-bold text-white">{role.label}</span><span className={`agent-node-state ${active ? 'is-hot' : ''}`}>{active ? 'ACTIVE' : event ? 'IN TRACE' : 'READY'}</span></div><p className="mt-3 text-[10px] text-slate-400">{event ? event.summary || event.eventType : 'Activates when this role participates in the selected run.'}</p></div>;
+            })}
+          </div>
+          <p className="mt-3 text-[10px] text-slate-500">Four observable system roles; only Conversation & Intent is currently an autonomous AI agent. Other roles are deterministic workflows.</p>
         </section>
         <section className="agent-panel overflow-hidden rounded-3xl">
           <div className="flex flex-wrap items-end justify-between gap-3 border-b border-white/[0.07] px-5 py-5 sm:px-7">
@@ -371,7 +391,7 @@ export default function AgentDashboardPage() {
               })}
             </div>
             <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[10px] text-slate-500">
-              <span className="inline-flex items-center gap-1.5"><Bot className="h-3.5 w-3.5 text-violet-300" /> 1 AI conversation/intent agent</span>
+              <span className="inline-flex items-center gap-1.5"><Bot className="h-3.5 w-3.5 text-violet-300" /> 4 specialist roles: Conversation · Movie · Train · Booking</span>
               <span className="inline-flex items-center gap-1.5"><GitBranch className="h-3.5 w-3.5 text-cyan-300" /> Search is tool calls, not sub-agents</span>
               <span className="inline-flex items-center gap-1.5"><Workflow className="h-3.5 w-3.5 text-amber-300" /> Booking and payment are app workflows</span>
             </div>

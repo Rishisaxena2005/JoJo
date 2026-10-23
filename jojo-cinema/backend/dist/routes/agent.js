@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
+const zod_1 = require("zod");
 const graph_1 = require("../agent-runtime/graph");
 const agent_1 = require("../agents/conversation/agent");
 const env_1 = require("../config/env");
@@ -23,6 +24,20 @@ function dashboardEvent(event) {
     const { conversationId: _conversationId, ...safeEvent } = event;
     return safeEvent;
 }
+const traceEventSchema = zod_1.z.object({
+    runId: zod_1.z.string().uuid(),
+    eventType: zod_1.z.enum(['channel.received', 'channel.replied', 'channel.failed', 'workflow.started', 'workflow.completed', 'workflow.failed']),
+    workflow: zod_1.z.enum(['movie', 'train']).optional(),
+    durationMs: zod_1.z.number().int().nonnegative().max(300_000).optional(),
+}).strict();
+const traceSummary = {
+    'channel.received': 'Incoming Telegram action accepted · user content hidden',
+    'channel.replied': 'Reply delivered over Telegram',
+    'channel.failed': 'Telegram turn failed before delivery',
+    'workflow.started': 'Booking workflow started',
+    'workflow.completed': 'Booking workflow handled this turn',
+    'workflow.failed': 'Booking workflow failed',
+};
 // GET /api/agent/events — operational trace for the local/demo agent dashboard.
 router.get('/events', (req, res) => {
     res.status(200).set({
@@ -42,11 +57,38 @@ router.get('/events', (req, res) => {
         unsubscribe();
     });
 });
+// POST /api/agent/trace-event — bounded, content-free telemetry from the
+// separate Telegram polling process. Event labels are server-selected; caller
+// supplied summaries, user text, and payloads are never accepted.
+router.post('/trace-event', (req, res) => {
+    const parsed = traceEventSchema.safeParse(req.body);
+    if (!parsed.success)
+        return res.status(400).json({ success: false, data: null, error: { code: 'INVALID_TRACE_EVENT', message: 'Invalid trace event.' } });
+    const event = parsed.data;
+    const isWorkflowEvent = event.eventType.startsWith('workflow.');
+    if (isWorkflowEvent !== Boolean(event.workflow))
+        return res.status(400).json({ success: false, data: null, error: { code: 'INVALID_TRACE_EVENT', message: 'A workflow label is required only for workflow events.' } });
+    const isFailed = event.eventType.endsWith('.failed');
+    const isStarted = event.eventType.endsWith('.started');
+    const workflowName = event.workflow === 'train' ? 'Train booking workflow' : 'Movie booking workflow';
+    (0, events_1.createAgentEvent)({
+        runId: event.runId,
+        conversationId: `trace-${event.runId}`,
+        agentId: isWorkflowEvent ? `${event.workflow}-booking-flow` : 'telegram-adapter',
+        agentName: isWorkflowEvent ? workflowName : 'Telegram adapter',
+        eventType: event.eventType,
+        status: isFailed ? 'failed' : isStarted ? 'running' : 'completed',
+        summary: isWorkflowEvent ? `${workflowName}: ${traceSummary[event.eventType].toLowerCase()}` : traceSummary[event.eventType],
+        ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
+        ...(isFailed ? { errorCategory: 'unknown', recoveryStatus: 'not_attempted' } : {}),
+    });
+    return res.json((0, api_1.success)({ accepted: true }));
+});
 // POST /api/agent/chat — intended for the Telegram adapter or demo chat client.
 router.post('/chat', async (req, res, next) => {
     try {
         const input = schemas_1.agentRunInputSchema.parse(req.body);
-        const run = await getRuntime().run(input);
+        const run = await getRuntime().run(input, { runId: req.header('x-jojo-run-id') });
         // Keep internal reasoning, routing decisions, and raw grounding evidence private.
         res.json((0, api_1.success)({
             conversationId: run.conversationId,

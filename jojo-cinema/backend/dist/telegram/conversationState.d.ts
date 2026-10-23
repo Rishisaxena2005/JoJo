@@ -223,7 +223,7 @@ export declare const conversationStateSchema: z.ZodObject<{
 }, "strict", z.ZodTypeAny, {
     updatedAt: string | null;
     schemaVersion: 1;
-    stage: "booking" | "payment" | "idle" | "movie_search" | "awaiting_city" | "awaiting_movie" | "awaiting_theatre" | "awaiting_showtime" | "awaiting_seats" | "recovering";
+    stage: "idle" | "booking" | "payment" | "movie_search" | "awaiting_city" | "awaiting_movie" | "awaiting_theatre" | "awaiting_showtime" | "awaiting_seats" | "recovering";
     activeIntent: string | null;
     entities: {
         date: string | null;
@@ -292,7 +292,7 @@ export declare const conversationStateSchema: z.ZodObject<{
 }, {
     updatedAt?: string | null | undefined;
     schemaVersion?: 1 | undefined;
-    stage?: "booking" | "payment" | "idle" | "movie_search" | "awaiting_city" | "awaiting_movie" | "awaiting_theatre" | "awaiting_showtime" | "awaiting_seats" | "recovering" | undefined;
+    stage?: "idle" | "booking" | "payment" | "movie_search" | "awaiting_city" | "awaiting_movie" | "awaiting_theatre" | "awaiting_showtime" | "awaiting_seats" | "recovering" | undefined;
     activeIntent?: string | null | undefined;
     entities?: {
         date?: string | null | undefined;
@@ -370,7 +370,7 @@ export declare function loadTelegramConversation(chatId: string, userId: string,
     state: {
         updatedAt: string | null;
         schemaVersion: 1;
-        stage: "booking" | "payment" | "idle" | "movie_search" | "awaiting_city" | "awaiting_movie" | "awaiting_theatre" | "awaiting_showtime" | "awaiting_seats" | "recovering";
+        stage: "idle" | "booking" | "payment" | "movie_search" | "awaiting_city" | "awaiting_movie" | "awaiting_theatre" | "awaiting_showtime" | "awaiting_seats" | "recovering";
         activeIntent: string | null;
         entities: {
             date: string | null;
@@ -447,7 +447,7 @@ export declare function loadTelegramConversation(chatId: string, userId: string,
     state: {
         updatedAt: string | null;
         schemaVersion: 1;
-        stage: "booking" | "payment" | "idle" | "movie_search" | "awaiting_city" | "awaiting_movie" | "awaiting_theatre" | "awaiting_showtime" | "awaiting_seats" | "recovering";
+        stage: "idle" | "booking" | "payment" | "movie_search" | "awaiting_city" | "awaiting_movie" | "awaiting_theatre" | "awaiting_showtime" | "awaiting_seats" | "recovering";
         activeIntent: string | null;
         entities: {
             date: string | null;

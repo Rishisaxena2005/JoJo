@@ -11,6 +11,7 @@ const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const env_1 = require("./config/env");
 const logger_1 = require("./config/logger");
 const errorHandler_1 = require("./middleware/errorHandler");
+const events_1 = require("./agent-runtime/events");
 // Routes
 const health_1 = __importDefault(require("./routes/health"));
 const movies_1 = __importDefault(require("./routes/movies"));
@@ -38,7 +39,7 @@ app.use((0, cors_1.default)({
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Webhook-Signature', 'X-Idempotency-Key'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Webhook-Signature', 'X-Idempotency-Key', 'X-JoJo-Run-Id'],
 }));
 // ─── Body Parsing ────────────────────────────────────────────────────────────
 app.use(express_1.default.json({ limit: '1mb' }));
@@ -57,6 +58,76 @@ const limiter = (0, express_rate_limit_1.default)({
     message: { success: false, data: null, error: { code: 'RATE_LIMITED', message: 'Too many requests' } },
 });
 app.use('/api', limiter);
+function traceableOperation(method, path) {
+    if (method === 'GET' && path === '/trains/stations')
+        return 'train.list_stations';
+    if (method === 'GET' && path === '/trains/search')
+        return 'train.search_journeys';
+    if (method === 'POST' && path === '/trains/bookings')
+        return 'train.create_demo_booking';
+    if (method === 'POST' && /^\/trains\/bookings\/[^/]+\/cancel$/.test(path))
+        return 'train.cancel_demo_booking';
+    if (method === 'POST' && /^\/trains\/bookings\/[^/]+\/pay-demo$/.test(path))
+        return 'train.confirm_demo_booking';
+    if (method === 'GET' && /^\/trains\/bookings\/[^/]+$/.test(path))
+        return 'train.retrieve_booking';
+    if (method === 'GET' && path === '/movies/cities')
+        return 'cinema.list_cities';
+    if (method === 'GET' && path === '/movies')
+        return 'cinema.search_movies';
+    if (method === 'GET' && path === '/shows')
+        return 'cinema.search_showtimes';
+    if (method === 'GET' && /^\/shows\/[^/]+\/seats$/.test(path))
+        return 'cinema.load_seat_map';
+    if (method === 'GET' && /^\/shows\/[^/]+$/.test(path))
+        return 'cinema.load_show';
+    if (method === 'POST' && path === '/seat-locks')
+        return 'cinema.hold_seats';
+    if (method === 'POST' && /^\/seat-locks\/[^/]+\/release$/.test(path))
+        return 'cinema.release_seats';
+    if (method === 'POST' && path === '/bookings')
+        return 'cinema.create_booking';
+    if (method === 'GET' && /^\/bookings\/[^/]+\/ticket$/.test(path))
+        return 'cinema.retrieve_ticket';
+    if (method === 'POST' && path === '/payments/checkout')
+        return 'payment.create_demo_checkout';
+    if (method === 'POST' && /^\/payments\/[^/]+\/simulate$/.test(path))
+        return 'payment.simulate_demo_payment';
+    return undefined;
+}
+// Capture real calls made by the separate Telegram process. The trace accepts
+// only UUID correlation IDs and allow-listed, non-sensitive query fields.
+app.use('/api', (req, res, next) => {
+    const runId = req.header('x-jojo-run-id');
+    const toolName = traceableOperation(req.method, req.path);
+    if (!runId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(runId) || !toolName)
+        return next();
+    const train = toolName.startsWith('train.');
+    const payment = toolName.startsWith('payment.');
+    const conversationId = `trace-${runId}`;
+    const agentId = train ? 'train-booking-flow' : payment ? 'payment-workflow' : 'movie-booking-flow';
+    const agentName = train ? 'Train booking workflow' : payment ? 'Demo payment workflow' : 'Movie booking workflow';
+    const sanitizedArguments = { method: req.method };
+    const query = new URLSearchParams(req.url.split('?')[1] ?? '');
+    for (const name of ['city', 'date', 'from', 'to', 'passengers', 'class']) {
+        const value = query.get(name);
+        if (value && value.length <= 60)
+            sanitizedArguments[name] = name === 'passengers' && /^\d+$/.test(value) ? Number(value) : value;
+    }
+    const startedAt = Date.now();
+    (0, events_1.createAgentEvent)({ runId, conversationId, agentId, agentName, eventType: 'tool.started', status: 'running', toolName, sanitizedArguments });
+    res.once('finish', () => {
+        const failed = res.statusCode >= 400;
+        (0, events_1.createAgentEvent)({
+            runId, conversationId, agentId, agentName,
+            eventType: failed ? 'tool.failed' : 'tool.completed', status: failed ? 'failed' : 'completed', toolName,
+            ...(!failed ? { toolResultSummary: `Service responded with HTTP ${res.statusCode}` } : {}),
+            durationMs: Date.now() - startedAt,
+            ...(failed ? { errorCategory: 'tool', recoveryStatus: 'not_attempted' } : {}),
+        });
+    });
+    next();
+});
 // ─── Routes ──────────────────────────────────────────────────────────────────
 app.use('/api/health', health_1.default);
 app.use('/api/movies', movies_1.default);
@@ -94,6 +165,7 @@ app.get('/api', (_req, res) => {
             'POST /api/payments/webhook',
             'GET  /api/tickets/:ticketReference/verify',
             'POST /api/agent/chat',
+            'POST /api/agent/trace-event',
             'GET  /api/trains/stations?q=',
             'GET  /api/trains/search?from=&to=&date=&passengers=',
             'POST /api/trains/bookings',

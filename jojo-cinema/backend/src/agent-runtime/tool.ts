@@ -24,9 +24,11 @@ export async function invokeTool<TArgs extends z.ZodTypeAny, TResult>(
 ): Promise<TResult> {
   const args = tool.schema.parse(rawArgs);
   const startedAt = Date.now();
+  createAgentEvent({ runId: context.runId, conversationId: context.conversationId, agentId: context.agentId, agentName: context.agentName, from: context.agentName, to: `Tool · ${tool.name}`, eventType: 'handoff.sent', status: 'running', summary: `Request handed to ${tool.name}` });
   createAgentEvent({ runId: context.runId, conversationId: context.conversationId, agentId: context.agentId, agentName: context.agentName, eventType: 'tool.started', status: 'running', toolName: tool.name, sanitizedArguments: tool.sanitizeArguments(args) });
   try {
     const result = await tool.execute(args, context);
+    createAgentEvent({ runId: context.runId, conversationId: context.conversationId, agentId: context.agentId, agentName: context.agentName, from: `Tool · ${tool.name}`, to: context.agentName, eventType: 'handoff.returned', status: 'completed', summary: tool.summarizeResult(result), durationMs: Date.now() - startedAt });
     createAgentEvent({ runId: context.runId, conversationId: context.conversationId, agentId: context.agentId, agentName: context.agentName, eventType: 'tool.completed', status: 'completed', toolName: tool.name, toolResultSummary: tool.summarizeResult(result), durationMs: Date.now() - startedAt });
     return result;
   } catch (error) {

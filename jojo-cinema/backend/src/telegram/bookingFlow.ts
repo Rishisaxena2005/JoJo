@@ -470,7 +470,7 @@ async function selectShow(flow: BookingFlow, message: string): Promise<string | 
   return partySizeReply(flow);
 }
 
-async function confirmSeats(flow: BookingFlow, message: string): Promise<string> {
+async function confirmSeats(flow: BookingFlow, message: string): Promise<string | BookingReply> {
   const labels = extractSeatLabels(message);
   if (labels.length !== flow.partySize) {
     return `Please choose exactly ${flow.partySize} available seat label${flow.partySize === 1 ? '' : 's'}, separated by commas.`;

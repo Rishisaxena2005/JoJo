@@ -6,7 +6,7 @@ export type AgentEventType =
   | 'channel.received' | 'channel.replied' | 'channel.failed'
   | 'workflow.started' | 'workflow.completed' | 'workflow.failed'
   | 'run.started' | 'agent.started' | 'agent.decided' | 'agent.completed' | 'agent.failed'
-  | 'run.completed' | 'run.failed' | 'tool.started' | 'tool.completed' | 'tool.failed';
+  | 'run.completed' | 'run.failed' | 'handoff.sent' | 'handoff.returned' | 'tool.started' | 'tool.completed' | 'tool.failed';
 export type AgentStatus = 'idle' | 'running' | 'waiting' | 'completed' | 'failed';
 
 export interface AgentEvent {
@@ -14,6 +14,8 @@ export interface AgentEvent {
   conversationId: string;
   agentId: string;
   agentName: string;
+  from?: string;
+  to?: string;
   eventType: AgentEventType;
   timestamp: string;
   status: AgentStatus;

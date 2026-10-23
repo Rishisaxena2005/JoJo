@@ -2,12 +2,14 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleBookingMessage = handleBookingMessage;
 exports.handleBookingCallback = handleBookingCallback;
+const events_1 = require("../agent-runtime/events");
 const apiBase = process.env.JOJO_BOOKING_API_BASE_URL ?? 'http://localhost:4000/api';
 const flows = new Map();
 async function api(path, init = {}) {
+    const trace = (0, events_1.getAgentTraceContext)();
     const response = await fetch(`${apiBase}${path}`, {
         ...init,
-        headers: { 'content-type': 'application/json', ...(init.headers ?? {}) },
+        headers: { 'content-type': 'application/json', ...(trace ? { 'x-jojo-run-id': trace.runId } : {}), ...(init.headers ?? {}) },
     });
     const envelope = await response.json();
     if (!response.ok || !envelope.success || envelope.data === undefined) {
@@ -425,7 +427,10 @@ async function confirmSeats(flow, message) {
     flow.amount = seats.reduce((sum, seat) => sum + Number(seat.price), 0);
     flow.stage = 'confirm_payment';
     flows.set(flow.chatId, flow);
-    return `Seats ${locked.seatLabels.join(', ')} are held for 5 minutes. Total: ₹${flow.amount}. This is a demo booking with simulated payment only. Reply PAY DEMO to confirm, or CANCEL to release the seats.`;
+    return {
+        text: `🎟️ Booking review\n${flow.movie.title} · ${flow.city}\n${formatShow(flow.show, 0).replace(/^1\\. /, '')}\nSeats: ${locked.seatLabels.join(', ')}\nTotal: ₹${flow.amount}\n\nSeats are held for 5 minutes. This is a demo booking with simulated payment only. Confirm your ticket to continue, or cancel to release the seats.`,
+        inlineKeyboard: [[{ text: '✅ Confirm ticket · PAY DEMO', callback_data: 'payment|confirm' }], [{ text: 'Cancel booking', callback_data: 'payment|cancel' }]],
+    };
 }
 async function finishDemoPayment(flow) {
     const booking = await api('/bookings', {
@@ -610,6 +615,14 @@ async function handleBookingCallback(chatId, data) {
     const flow = flows.get(chatId);
     if (!flow)
         return null;
+    if (data === 'payment|confirm' && flow.stage === 'confirm_payment')
+        return finishDemoPayment(flow);
+    if (data === 'payment|cancel' && flow.stage === 'confirm_payment') {
+        if (flow.lockId)
+            await api(`/seat-locks/${flow.lockId}/release`, { method: 'POST', body: JSON.stringify({ sessionId: flow.sessionId }) }).catch(() => undefined);
+        flows.delete(chatId);
+        return 'Booking cancelled. Your held seats have been released.';
+    }
     const [, action] = data.split('|', 2);
     if (action === 'cancel') {
         flows.delete(chatId);

@@ -151,6 +151,8 @@ In Telegram, say “train booking” or “find trains” to start. The guided o
 
 ## 🤖 JoJo WhatsApp AI Agent Integration
 
+> For the current implementation truth, synopsis/report starter, AI architecture, operational guidance, limitations, and recommended diagrams, see [docs/PROJECT_DOSSIER.md](docs/PROJECT_DOSSIER.md). The legacy WhatsApp multi-agent wording below describes an integration target, not the currently implemented single-agent Telegram runtime.
+
 For full API documentation, endpoint lists, request/response samples, and agent integration flows, see:
 - [docs/API_CONTRACT.md](docs/API_CONTRACT.md) — WhatsApp Agent Integration Guide
 - [docs/openapi.yaml](docs/openapi.yaml) — OpenAPI 3.0 Specification

@@ -14,7 +14,9 @@ export interface AgentRunResult {
     estimatedCostUsd: number;
 }
 export declare function createAgentRuntime(agent: Agent, options: AgentRuntimeOptions): {
-    run(rawInput: unknown): Promise<AgentRunResult>;
+    run(rawInput: unknown, runOptions?: {
+        runId?: string;
+    }): Promise<AgentRunResult>;
     maxCostUsd: number;
 };
 //# sourceMappingURL=graph.d.ts.map

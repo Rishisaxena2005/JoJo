@@ -67,6 +67,8 @@ export declare const conversationInterpretationSchema: z.ZodObject<{
 }, "strip", z.ZodTypeAny, {
     rationale: string;
     intent: "booking" | "showtime_search" | "train_search" | "movie_discovery" | "seat_selection" | "booking_support" | "general_cinema_help" | "out_of_domain" | "unclear";
+    selectedTool: "movie_search" | "showtime_search" | "train_search" | null;
+    needsClarification: boolean;
     constraints: {
         date: string | null;
         city: string | null;
@@ -76,9 +78,7 @@ export declare const conversationInterpretationSchema: z.ZodObject<{
         timePreference: string | null;
         durationPreference: string | null;
     };
-    needsClarification: boolean;
     clarificationQuestion: string | null;
-    selectedTool: "movie_search" | "showtime_search" | "train_search" | null;
     toolArguments: {
         date?: string | null | undefined;
         query?: string | null | undefined;
@@ -94,6 +94,8 @@ export declare const conversationInterpretationSchema: z.ZodObject<{
 }, {
     rationale: string;
     intent: "booking" | "showtime_search" | "train_search" | "movie_discovery" | "seat_selection" | "booking_support" | "general_cinema_help" | "out_of_domain" | "unclear";
+    selectedTool: "movie_search" | "showtime_search" | "train_search" | null;
+    needsClarification: boolean;
     constraints: {
         date: string | null;
         city: string | null;
@@ -103,9 +105,7 @@ export declare const conversationInterpretationSchema: z.ZodObject<{
         timePreference: string | null;
         durationPreference: string | null;
     };
-    needsClarification: boolean;
     clarificationQuestion: string | null;
-    selectedTool: "movie_search" | "showtime_search" | "train_search" | null;
     toolArguments: {
         date?: string | null | undefined;
         query?: string | null | undefined;
